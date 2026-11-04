@@ -47,8 +47,17 @@ async function main() {
     },
   });
 
+  // Stable IDs: reseeding must not change a book's ID, otherwise carts saved in
+  // shoppers' browsers (localStorage) would point at books that no longer exist.
+  const slugify = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
   await prisma.book.createMany({
     data: BOOKS.map((book) => ({
+      id: `${book.category}-${slugify(book.title)}`,
       title: book.title,
       author: book.author,
       priceCents: Math.round(book.price * 100),

@@ -1,50 +1,89 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useCart } from "@/lib/cart";
+import { openCartDrawer } from "@/components/CartDrawer";
 
 export function Topbar() {
   const { data } = useSession();
   const { count } = useCart();
+  const pathname = usePathname();
+  const [scrolled, setScrolled] = useState(false);
+  const [farDown, setFarDown] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setScrolled(y > 8);
+      setFarDown(y > 900);
+      setProgress(max > 0 ? Math.min(1, y / max) : 0);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const linkClass = (href: string) =>
+    `nav-link ${pathname?.startsWith(href) ? "is-active" : ""}`;
 
   return (
-    <header className="mx-auto mt-4 flex w-[min(1120px,calc(100%-2rem))] flex-wrap items-center justify-between gap-3 rounded-full border border-black/10 bg-[rgba(255,252,246,0.85)] px-4 py-3 shadow-sm backdrop-blur">
-      <Link href="/shop" className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-forest to-forest-deep font-display text-sm font-bold text-[#f8f4ec]">
-          MB
-        </span>
-        <span>
-          <span className="block font-display text-base font-bold tracking-wide">MY BOOK STORE</span>
-          <span className="block text-sm text-ink-soft">
-            {data?.user ? `Hello, ${data.user.name}` : "House collection shop"}
-          </span>
-        </span>
-      </Link>
-      <nav className="flex items-center gap-2">
-        <Link href="/shop" className="rounded-full px-3 py-2 text-sm hover:bg-black/5">
-          Shop
+    <>
+    <header className={`site-header ${scrolled ? "is-scrolled" : ""}`}>
+      <div className="site-header-inner">
+        <Link href="/shop" className="wordmark">
+          My Book Store
         </Link>
-        <Link
-          href="/cart"
-          className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-[#f8f4ec]"
-        >
-          Cart <span className="ml-1 inline-grid min-w-5 place-items-center rounded-full bg-amber px-1.5 text-xs font-bold text-ink">{count}</span>
-        </Link>
-        {data?.user ? (
-          <button
-            type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="rounded-full px-3 py-2 text-sm hover:bg-black/5"
-          >
-            Logout
-          </button>
-        ) : (
-          <Link href="/login" className="rounded-full px-3 py-2 text-sm hover:bg-black/5">
-            Login
+        <nav className="flex items-center gap-4 text-[15px] sm:gap-6">
+          <Link href="/shop" className={linkClass("/shop")}>
+            Shop
           </Link>
-        )}
-      </nav>
+          <Link
+            href="/cart"
+            id="cart-link"
+            className={linkClass("/cart")}
+            onClick={(e) => {
+              if (pathname?.startsWith("/cart") || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+              e.preventDefault();
+              openCartDrawer();
+            }}
+          >
+            Cart
+            <span className="cart-count" aria-label={`${count} items in cart`}>
+              <span key={count} className="cart-count-num">
+                {count}
+              </span>
+            </span>
+          </Link>
+          {data?.user ? (
+            <span className="hidden items-center gap-4 sm:flex">
+              <span className="text-ink-soft">{data.user.name}</span>
+              <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="nav-link">
+                Sign out
+              </button>
+            </span>
+          ) : (
+            <Link href="/login" className={linkClass("/login")}>
+              Sign in
+            </Link>
+          )}
+        </nav>
+      </div>
+      <span className="read-progress" style={{ transform: `scaleX(${progress})` }} aria-hidden="true" />
     </header>
+    <button
+      type="button"
+      className={`to-top ${farDown ? "is-shown" : ""}`}
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      tabIndex={farDown ? 0 : -1}
+      aria-hidden={!farDown}
+    >
+      Back to top
+    </button>
+    </>
   );
 }

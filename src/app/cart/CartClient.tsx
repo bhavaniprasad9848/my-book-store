@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { useCart } from "@/lib/cart";
 import { calcShippingCents, moneyFromCents } from "@/lib/catalog";
+import { BookJacket } from "@/components/BookJacket";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 
 type Book = {
   id: string;
@@ -19,17 +21,70 @@ type Book = {
 export default function CartPage() {
   const { items, setQty, removeItem, clear, count } = useCart();
   const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<string[]>([]);
+
+  function removeWithAnimation(bookId: string) {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      removeItem(bookId);
+      return;
+    }
+    setRemoving((ids) => [...ids, bookId]);
+    window.setTimeout(() => {
+      removeItem(bookId);
+      setRemoving((ids) => ids.filter((id) => id !== bookId));
+    }, 320);
+  }
   const searchParams = useSearchParams();
   const canceled = searchParams.get("canceled");
 
   useEffect(() => {
-    fetch("/api/books")
-      .then((res) => res.json())
-      .then((data) => setBooks(data.books || []))
-      .catch(() => setBooks([]));
+    let cancelled = false;
+
+    async function loadBooks() {
+      try {
+        const res = await fetch("/api/books");
+        // An expired login redirects /api/books to the login page (HTML, not JSON).
+        const isJson = (res.headers.get("content-type") || "").includes("application/json");
+        if (!res.ok || !isJson) throw new Error("Could not load books");
+        const data = await res.json();
+        if (!cancelled) setBooks(data.books || []);
+      } catch {
+        if (!cancelled) {
+          setLoadError(
+            "We couldn't load your book details, so the order summary can't be shown. Please refresh the page, or log in again."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadBooks();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Cart entries whose book is no longer in the database (for example after the
+  // catalog was reseeded) can never be priced or bought, so drop them instead of
+  // leaving the cart badge and the order summary out of sync.
+  useEffect(() => {
+    if (loading || loadError) return;
+    const missing = items.filter((item) => !books.some((book) => book.id === item.bookId));
+    if (missing.length === 0) return;
+    missing.forEach((item) => removeItem(item.bookId));
+    setNotice(
+      `${missing.length} item${missing.length === 1 ? " was" : "s were"} removed from your cart because ${
+        missing.length === 1 ? "it is" : "they are"
+      } no longer in the store. Please add ${missing.length === 1 ? "it" : "them"} again from the shop.`
+    );
+  }, [loading, loadError, items, books, removeItem]);
 
   const rows = useMemo(() => {
     return items
@@ -48,21 +103,26 @@ export default function CartPage() {
   async function checkout() {
     setBusy(true);
     setError("");
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: items.map((item) => ({ bookId: item.bookId, qty: item.qty })),
-      }),
-    });
-    const data = await res.json();
-    setBusy(false);
-    if (!res.ok) {
-      setError(data.error || "Checkout failed");
-      return;
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: rows.map((row) => ({ bookId: row.bookId, qty: row.qty })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Checkout failed");
+        return;
+      }
+      clear();
+      window.location.href = data.url;
+    } catch {
+      setError("Checkout failed. Please refresh the page, log in again, and retry.");
+    } finally {
+      setBusy(false);
     }
-    clear();
-    window.location.href = data.url;
   }
 
   return (
@@ -85,6 +145,12 @@ export default function CartPage() {
           </p>
         ) : null}
 
+        {notice ? (
+          <p className="mb-4 rounded-xl border border-amber/30 bg-amber/10 px-4 py-3 text-sm">
+            {notice}
+          </p>
+        ) : null}
+
         {count === 0 ? (
           <div className="panel p-8 text-center">
             <h2 className="font-display text-2xl">Your cart is empty</h2>
@@ -92,14 +158,38 @@ export default function CartPage() {
               Browse books
             </Link>
           </div>
+        ) : loading ? (
+          <div className="panel p-8 text-center">
+            <p className="text-ink-soft">Loading your cart...</p>
+          </div>
+        ) : loadError ? (
+          <div className="panel p-8 text-center">
+            <p className="text-sm text-red-700">{loadError}</p>
+            <button
+              type="button"
+              className="btn-primary mt-4"
+              onClick={() => window.location.reload()}
+            >
+              Refresh
+            </button>
+          </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
-            <section className="panel p-5">
-              {rows.map((row) => (
+            <section className="panel cart-list p-5">
+              {rows.map((row, i) => (
                 <div
                   key={row.bookId}
-                  className="flex flex-wrap items-start justify-between gap-3 border-b border-black/10 py-4 last:border-0"
+                  className={`cart-row ${removing.includes(row.bookId) ? "is-removing" : ""}`}
+                  style={{ "--i": i } as React.CSSProperties}
                 >
+                <div className="cart-row-inner flex flex-wrap items-start justify-between gap-3 border-b border-black/10 py-4">
+                  <div className="flex gap-4">
+                  <BookJacket
+                    title={row.book.title}
+                    author={row.book.author}
+                    category={row.book.category}
+                    className="cart-thumb"
+                  />
                   <div>
                     <h3 className="font-display text-lg">{row.book.title}</h3>
                     <p className="text-sm text-ink-soft">{row.book.author}</p>
@@ -110,9 +200,11 @@ export default function CartPage() {
                         className="h-7 w-7 rounded-full bg-black/5"
                         onClick={() => setQty(row.bookId, row.qty - 1)}
                       >
-                        −
+                        {"\u2212"}
                       </button>
-                      <span>{row.qty}</span>
+                      <span className="qty-num" aria-live="polite">
+                        <span key={row.qty}>{row.qty}</span>
+                      </span>
                       <button
                         type="button"
                         className="h-7 w-7 rounded-full bg-black/5"
@@ -122,28 +214,30 @@ export default function CartPage() {
                       </button>
                     </div>
                   </div>
+                  </div>
                   <div className="text-right">
                     <p className="font-semibold">
-                      {moneyFromCents(row.book.priceCents * row.qty)}
+                      <AnimatedNumber value={row.book.priceCents * row.qty} format={(n) => moneyFromCents(Math.round(n))} />
                     </p>
                     <button
                       type="button"
                       className="mt-2 text-sm text-ink-soft underline"
-                      onClick={() => removeItem(row.bookId)}
+                      onClick={() => removeWithAnimation(row.bookId)}
                     >
                       Remove
                     </button>
                   </div>
                 </div>
+                </div>
               ))}
             </section>
 
-            <aside className="panel h-fit p-5">
+            <aside className="panel cart-summary h-fit p-5">
               <h3 className="font-display text-xl">Order summary</h3>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span>{moneyFromCents(subtotalCents)}</span>
+                  <AnimatedNumber value={subtotalCents} format={(n) => moneyFromCents(Math.round(n))} />
                 </div>
                 <div className="flex justify-between">
                   <span>Shipping</span>
@@ -151,11 +245,16 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between border-t border-black/10 pt-3 text-base font-bold">
                   <span>Total</span>
-                  <span>{moneyFromCents(totalCents)}</span>
+                  <AnimatedNumber value={totalCents} format={(n) => moneyFromCents(Math.round(n))} />
                 </div>
               </div>
               {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
-              <button className="btn-primary mt-4 w-full" type="button" disabled={busy} onClick={checkout}>
+              <button
+                className="btn-primary mt-4 w-full"
+                type="button"
+                disabled={busy || rows.length === 0}
+                onClick={checkout}
+              >
                 {busy ? "Redirecting to Stripe..." : "Pay with Stripe Checkout"}
               </button>
               <p className="mt-3 text-xs text-ink-soft">
