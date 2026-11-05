@@ -12,9 +12,27 @@ The original vanilla demo is saved in [`legacy-demo/`](legacy-demo/).
 
 ## Quick start
 
+Windows (PowerShell):
+
+```powershell
+.\start.ps1
+```
+
+macOS / Linux:
+
 ```bash
+./start.sh
+```
+
+The script creates `.env` with a random `AUTH_SECRET`, installs packages,
+creates the SQLite database, seeds it on first run, and starts the dev server.
+
+Manual steps, if you prefer:
+
+```bash
+cp .env.example .env   # then set AUTH_SECRET to a long random string
 npm install
-npx prisma migrate dev
+npx prisma migrate deploy
 npx prisma db seed
 npm run dev
 ```

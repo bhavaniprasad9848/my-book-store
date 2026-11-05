@@ -31,6 +31,7 @@ const BOOKS = [
 ];
 
 async function main() {
+  await prisma.rating.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.book.deleteMany();

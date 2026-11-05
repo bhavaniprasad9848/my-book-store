@@ -1,6 +1,12 @@
 import { Resend } from "resend";
 import { moneyFromCents } from "@/lib/catalog";
 
+/** Returns the Resend key, ignoring the "re_..." placeholder from .env.example. */
+function resendKey() {
+  const key = process.env.RESEND_API_KEY ?? "";
+  return /^re_[A-Za-z0-9_]{10,}$/.test(key) ? key : "";
+}
+
 type ReceiptOrder = {
   id: string;
   customerName: string;
@@ -37,7 +43,7 @@ export function buildReceiptText(order: ReceiptOrder) {
 }
 
 export async function sendReceiptEmail(order: ReceiptOrder) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = resendKey();
   const from = process.env.EMAIL_FROM || "MY BOOK STORE <onboarding@resend.dev>";
 
   if (!apiKey) {
@@ -97,7 +103,7 @@ export function buildShippingUpdateText(update: ShippingUpdate) {
 
 /** Emails the customer whenever the owner moves their order to a new shipping step. */
 export async function sendShippingUpdateEmail(update: ShippingUpdate) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = resendKey();
   const from = process.env.EMAIL_FROM || "MY BOOK STORE <onboarding@resend.dev>";
 
   if (!apiKey) {

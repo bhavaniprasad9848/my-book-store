@@ -9,5 +9,7 @@ export function getStripe() {
 }
 
 export function isStripeConfigured() {
-  return Boolean(process.env.STRIPE_SECRET_KEY?.startsWith("sk_"));
+  const key = process.env.STRIPE_SECRET_KEY ?? "";
+  // Ignore the "sk_test_..." placeholder copied from .env.example.
+  return /^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(key);
 }
