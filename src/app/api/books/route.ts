@@ -3,12 +3,13 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { getCategories } from "@/lib/categories";
 
 const createSchema = z.object({
   title: z.string().min(2),
   author: z.string().min(2),
   description: z.string().min(5),
-  category: z.enum(["kids", "school", "history", "nature", "adventure", "mix"]),
+  category: z.string().min(1),
   condition: z.string().min(2),
   pages: z.number().int().positive(),
   price: z.number().positive(),
@@ -37,6 +38,10 @@ export async function POST(request: Request) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid book details" }, { status: 400 });
+  }
+  const categoryExists = (await getCategories()).some((c) => c.id === parsed.data.category);
+  if (!categoryExists) {
+    return NextResponse.json({ error: "That category does not exist" }, { status: 400 });
   }
 
   const book = await prisma.book.create({

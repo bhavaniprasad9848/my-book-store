@@ -2,7 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CATEGORIES, categoryById } from "@/lib/catalog";
+import { getCategories } from "@/lib/categories";
+import { ratingSummaries } from "@/lib/ratings";
+import { LiveStockProvider } from "@/components/LiveStock";
+import { AddCategoryForm } from "@/components/AddCategoryForm";
 import { Topbar } from "@/components/Topbar";
 import { BookCard } from "@/components/BookCard";
 import { AddBookForm } from "@/components/AddBookForm";
@@ -27,7 +30,8 @@ export default async function ShopPage({
   const params = await searchParams;
   const active = params.category || "all";
   const isAdmin = session.user.role === Role.ADMIN;
-  const activeCat = categoryById(active);
+  const categories = await getCategories();
+  const activeCat = categories.find((c) => c.id === active);
   const q = (params.q || "").trim().slice(0, 80);
 
   const books = await prisma.book.findMany({
@@ -37,6 +41,8 @@ export default async function ShopPage({
     },
     orderBy: [{ category: "asc" }, { title: "asc" }],
   });
+  const ratings = await ratingSummaries(books.map((b) => b.id));
+  const initialStock = Object.fromEntries(books.map((b) => [b.id, b.stock]));
 
   const tab = (id: string, label: string) => (
     <Link
@@ -58,7 +64,7 @@ export default async function ShopPage({
         <div id="shelves" className="shop-toolbar">
           <nav className="tabs" aria-label="Book categories">
             {tab("all", "All books")}
-            {CATEGORIES.map((cat) => tab(cat.id, shortName(cat.name)))}
+            {categories.map((cat) => tab(cat.id, shortName(cat.name)))}
           </nav>
           <ShopSearch />
         </div>
@@ -72,13 +78,18 @@ export default async function ShopPage({
         ) : null}
 
         {isAdmin ? (
-          <p className="admin-note">You are signed in as the owner. Each shelf has a form at the end for adding new titles.</p>
+          <>
+            <p className="admin-note">You are signed in as the owner. Each shelf has a form at the end for adding new titles.</p>
+            <AddCategoryForm />
+          </>
         ) : null}
 
+        <LiveStockProvider initial={initialStock}>
+
         {active === "all" ? (
-          CATEGORIES.map((cat) => {
+          categories.map((cat) => {
             const sectionBooks = books.filter((book) => book.category === cat.id);
-            if (q && sectionBooks.length === 0) return null;
+            if (sectionBooks.length === 0 && (q || !isAdmin)) return null;
             return (
               <section key={cat.id} className="shelf-section">
                 <CategoryBanner
@@ -90,7 +101,7 @@ export default async function ShopPage({
                 />
                 <div className="book-grid reveal">
                   {sectionBooks.map((book, i) => (
-                    <BookCard key={book.id} index={i} book={{ ...book, categoryName: cat.name }} />
+                    <BookCard key={book.id} index={i} rating={ratings[book.id]} book={{ ...book, categoryName: cat.name }} />
                   ))}
                 </div>
                 {isAdmin ? <AddBookForm category={cat.id} /> : null}
@@ -109,13 +120,19 @@ export default async function ShopPage({
             ) : (
               <div className="book-grid reveal">
                 {books.map((book, i) => (
-                  <BookCard key={book.id} index={i} book={{ ...book, categoryName: activeCat?.name || book.category }} />
+                  <BookCard
+                    key={book.id}
+                    index={i}
+                    rating={ratings[book.id]}
+                    book={{ ...book, categoryName: activeCat?.name || book.category }}
+                  />
                 ))}
               </div>
             )}
             {isAdmin ? <AddBookForm category={active} /> : null}
           </section>
         )}
+        </LiveStockProvider>
       </main>
       <RevealOnScroll />
       <footer className="site-footer">

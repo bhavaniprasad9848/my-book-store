@@ -70,3 +70,53 @@ export async function sendReceiptEmail(order: ReceiptOrder) {
     return { ok: false, status: message };
   }
 }
+
+type ShippingUpdate = {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  statusLabel: string;
+  detail: string;
+  items: Array<{ title: string; qty: number }>;
+};
+
+export function buildShippingUpdateText(update: ShippingUpdate) {
+  return [
+    `Hello ${update.customerName},`,
+    "",
+    `Your MY BOOK STORE order ${update.id} is now: ${update.statusLabel}.`,
+    update.detail,
+    "",
+    "Books in this order:",
+    ...update.items.map((item) => `- ${item.title} x${item.qty}`),
+    "",
+    "You can follow every step on the My orders page of the store.",
+    "Thank you for shopping with MY BOOK STORE.",
+  ].join("\n");
+}
+
+/** Emails the customer whenever the owner moves their order to a new shipping step. */
+export async function sendShippingUpdateEmail(update: ShippingUpdate) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM || "MY BOOK STORE <onboarding@resend.dev>";
+
+  if (!apiKey) {
+    console.log("[mail] RESEND_API_KEY missing. Status email preview:\n", buildShippingUpdateText(update));
+    return { ok: false, status: "Status saved. Email not sent because RESEND_API_KEY is not set." };
+  }
+
+  try {
+    const resend = new Resend(apiKey);
+    const result = await resend.emails.send({
+      from,
+      to: update.customerEmail,
+      subject: `Your MY BOOK STORE order is ${update.statusLabel.toLowerCase()}`,
+      text: buildShippingUpdateText(update),
+    });
+    if (result.error) return { ok: false, status: `Status saved. Email failed: ${result.error.message}` };
+    return { ok: true, status: `Status saved and emailed to ${update.customerEmail}` };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to send email";
+    return { ok: false, status: `Status saved. Email failed: ${message}` };
+  }
+}

@@ -194,6 +194,9 @@ export default function CartPage() {
                     <h3 className="font-display text-lg">{row.book.title}</h3>
                     <p className="text-sm text-ink-soft">{row.book.author}</p>
                     <p className="mt-1 font-semibold">{moneyFromCents(row.book.priceCents)}</p>
+                    <p className="text-xs text-ink-soft">
+                      {row.book.stock < 1 ? "Sold out" : row.book.stock <= 2 ? `Only ${row.book.stock} left` : `${row.book.stock} in stock`}
+                    </p>
                     <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-black/10 px-2 py-1">
                       <button
                         type="button"
@@ -208,7 +211,9 @@ export default function CartPage() {
                       <button
                         type="button"
                         className="h-7 w-7 rounded-full bg-black/5"
-                        onClick={() => setQty(row.bookId, row.qty + 1)}
+                        onClick={() => setQty(row.bookId, Math.min(row.book.stock, row.qty + 1))}
+                        disabled={row.qty >= row.book.stock}
+                        aria-label={`One more ${row.book.title}`}
                       >
                         +
                       </button>

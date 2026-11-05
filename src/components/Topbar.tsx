@@ -42,6 +42,11 @@ export function Topbar() {
           <Link href="/shop" className={linkClass("/shop")}>
             Shop
           </Link>
+          {data?.user ? (
+            <Link href="/orders" className={linkClass("/orders")}>
+              {data.user.role === "ADMIN" ? "Orders" : "My orders"}
+            </Link>
+          ) : null}
           <Link
             href="/cart"
             id="cart-link"

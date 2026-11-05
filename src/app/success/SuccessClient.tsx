@@ -112,9 +112,14 @@ export default function SuccessClient() {
             </div>
           ) : null}
 
-          <Link href="/shop" className="btn-primary mt-6 inline-flex">
-            Shop again
-          </Link>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link href="/orders" className="btn-primary inline-flex">
+              Track this order
+            </Link>
+            <Link href="/shop" className="btn-secondary inline-flex">
+              Shop again
+            </Link>
+          </div>
         </section>
       </main>
     </>
