@@ -19,6 +19,8 @@ const STEPS: { status: Status; label: string; detail: string }[] = [
 ];
 const stepIndex = (s: Status) => STEPS.findIndex((x) => x.status === s);
 const shortId = (id: string) => id.slice(-6).toUpperCase();
+/** What the live view compares: the shipping step, or "CANCELLED". */
+const stateOf = (o: OrderView) => (o.cancelled ? "CANCELLED" : o.shippingStatus);
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
 
@@ -26,7 +28,7 @@ export function OrdersClient({ initial, isAdmin }: { initial: OrdersPayload; isA
   const [data, setData] = useState(initial);
   const [flash, setFlash] = useState<string[]>([]);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
-  const prev = useRef(new Map(initial.orders.map((o) => [o.id, o.shippingStatus])));
+  const prev = useRef(new Map<string, string>(initial.orders.map((o) => [o.id, stateOf(o)])));
 
   // Live updates: check every 5 seconds while this tab is visible.
   useEffect(() => {
@@ -41,12 +43,18 @@ export function OrdersClient({ initial, isAdmin }: { initial: OrdersPayload; isA
         const changed: string[] = [];
         for (const o of next.orders) {
           const before = prev.current.get(o.id);
-          if (before && before !== o.shippingStatus) {
+          if (before && before !== stateOf(o)) {
             changed.push(o.id);
-            if (!isAdmin) announce(`Order #${shortId(o.id)} is now ${STEPS[stepIndex(o.shippingStatus)].label.toLowerCase()}.`);
+            if (!isAdmin) {
+              announce(
+                o.cancelled
+                  ? `Order #${shortId(o.id)} was cancelled.`
+                  : `Order #${shortId(o.id)} is now ${STEPS[stepIndex(o.shippingStatus)].label.toLowerCase()}.`
+              );
+            }
           }
         }
-        prev.current = new Map(next.orders.map((o) => [o.id, o.shippingStatus]));
+        prev.current = new Map(next.orders.map((o) => [o.id, stateOf(o)]));
         setData(next);
         setCheckedAt(new Date());
         if (changed.length) {
@@ -68,15 +76,20 @@ export function OrdersClient({ initial, isAdmin }: { initial: OrdersPayload; isA
   }, [isAdmin]);
 
   function patchOrder(id: string, patch: Partial<OrderView>) {
-    setData((d) => ({ ...d, orders: d.orders.map((o) => (o.id === id ? { ...o, ...patch } : o)) }));
-    if (patch.shippingStatus) prev.current.set(id, patch.shippingStatus);
+    setData((d) => {
+      const orders = d.orders.map((o) => (o.id === id ? { ...o, ...patch } : o));
+      const updated = orders.find((o) => o.id === id);
+      if (updated) prev.current.set(id, stateOf(updated));
+      return { ...d, orders };
+    });
   }
 
   function patchRating(bookId: string, stars: number, summary: { avg: number; count: number }) {
     setData((d) => ({ ...d, ratings: { ...d.ratings, [bookId]: summary }, myRatings: { ...d.myRatings, [bookId]: stars } }));
   }
 
-  const counts = STEPS.map((s) => ({ ...s, n: data.orders.filter((o) => o.shippingStatus === s.status).length }));
+  const counts = STEPS.map((s) => ({ ...s, n: data.orders.filter((o) => !o.cancelled && o.shippingStatus === s.status).length }));
+  const cancelledCount = data.orders.filter((o) => o.cancelled).length;
 
   return (
     <>
@@ -85,8 +98,8 @@ export function OrdersClient({ initial, isAdmin }: { initial: OrdersPayload; isA
           <h1 className="section-title">{isAdmin ? "Orders" : "My orders"}</h1>
           <p className="section-blurb">
             {isAdmin
-              ? "Move each order to its next step. The customer sees the change right away and gets an email."
-              : "Track each order as it moves from packing to your door. This page updates by itself."}
+              ? "Move each order to its next step, or cancel it before it ships. The customer sees the change right away and gets an email."
+              : "Track each order as it moves from packing to your door. You can cancel an order until it ships."}
           </p>
         </div>
         <p className="live-pill" aria-live="off">
@@ -102,12 +115,17 @@ export function OrdersClient({ initial, isAdmin }: { initial: OrdersPayload; isA
               <span className="status-count">{c.n}</span> {c.label}
             </p>
           ))}
+          {cancelledCount ? (
+            <p>
+              <span className="status-count">{cancelledCount}</span> Cancelled
+            </p>
+          ) : null}
         </div>
       ) : null}
 
       {data.orders.length === 0 ? (
         <div className="orders-empty">
-          <p className="font-display text-2xl">{isAdmin ? "No paid orders yet." : "You have no orders yet."}</p>
+          <p className="font-display text-2xl">{isAdmin ? "No orders yet." : "You have no orders yet."}</p>
           <p className="mt-1 text-ink-soft">
             {isAdmin ? "Paid orders will appear here as soon as customers check out." : "When you buy a book, you can follow its delivery here."}
           </p>
@@ -160,6 +178,45 @@ function OrderCard({
   const current = stepIndex(order.shippingStatus);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState("Changed my mind");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  async function cancel() {
+    setCancelling(true);
+    setCancelError("");
+    try {
+      const res = await fetch(`/api/orders/${order.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: isAdmin ? `Cancelled by the store: ${reason}` : reason }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCancelError(body.error || "Could not cancel this order");
+        return;
+      }
+      onStatus({
+        cancelled: true,
+        canCancel: false,
+        cancelledAt: body.cancelledAt ?? new Date().toISOString(),
+        cancelledBy: isAdmin ? "admin" : "customer",
+        cancelReason: reason,
+        refundStatus: body.refundStatus ?? null,
+      });
+      setConfirming(false);
+      announce(`Order #${shortId(order.id)} cancelled. ${body.refundStatus ?? ""}`);
+    } catch {
+      setCancelError("Could not reach the server. Try again.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  const reasons = isAdmin
+    ? ["Out of stock", "Customer asked to cancel", "Payment issue", "Other"]
+    : ["Changed my mind", "Ordered by mistake", "Found it somewhere else", "Delivery takes too long", "Other"];
 
   async function setStatus(status: Status) {
     setBusy(true);
@@ -186,7 +243,7 @@ function OrderCard({
 
   return (
     <motion.article
-      className={`order-card ${flashing ? "is-flashing" : ""}`}
+      className={`order-card ${flashing ? "is-flashing" : ""} ${order.cancelled ? "opacity-80" : ""}`}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: Math.min(index, 6) * 0.06, ease: [0.2, 0.75, 0.25, 1] }}
@@ -195,7 +252,7 @@ function OrderCard({
         <div>
           <h2 className="font-display text-xl">Order #{shortId(order.id)}</h2>
           <p className="text-sm text-ink-soft">
-            Paid {when(order.paidAt || order.createdAt)}
+            {order.cancelled ? "Ordered" : "Paid"} {when(order.paidAt || order.createdAt)}
             {isAdmin && order.customer ? (
               <>
                 <br />
@@ -204,8 +261,20 @@ function OrderCard({
             ) : null}
           </p>
         </div>
-        <p className="order-total">{moneyFromCents(order.totalCents)}</p>
+        <p className={`order-total ${order.cancelled ? "line-through decoration-2" : ""}`}>{moneyFromCents(order.totalCents)}</p>
       </header>
+
+      {order.cancelled ? (
+        <div className="my-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm" role="status">
+          <p className="font-semibold text-red-800">
+            ✕ Cancelled{order.cancelledAt ? ` on ${when(order.cancelledAt)}` : ""}
+            {order.cancelledBy === "admin" ? " by the store" : ""}
+          </p>
+          {order.cancelReason ? <p className="mt-1 text-red-900/80">Reason: {order.cancelReason}</p> : null}
+          {order.refundStatus ? <p className="mt-1 text-red-900/80">{order.refundStatus}</p> : null}
+        </div>
+      ) : (
+      <>
 
       <ol className="timeline" aria-label={`Delivery progress: ${STEPS[current].label}`}>
         <span className="timeline-track" aria-hidden="true">
@@ -262,6 +331,47 @@ function OrderCard({
         </div>
       ) : null}
 
+      {order.canCancel ? (
+        confirming ? (
+          <div className="my-4 rounded-xl border border-black/10 bg-white/60 p-4">
+            <p className="font-semibold">Cancel order #{shortId(order.id)}?</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              {isAdmin
+                ? "The books go back into stock, the customer is refunded and gets an email."
+                : `The books go back on the shelf and ${moneyFromCents(order.totalCents)} is refunded to your card.`}
+            </p>
+            <label className="mt-3 grid gap-1 text-sm font-medium">
+              Reason
+              <select className="status-select w-fit" value={reason} onChange={(e) => setReason(e.target.value)} disabled={cancelling}>
+                {reasons.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            {cancelError ? <p className="mt-2 text-sm text-red-700" role="alert">{cancelError}</p> : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className="btn-primary bg-red-700 hover:bg-red-800" disabled={cancelling} onClick={cancel}>
+                {cancelling ? "Cancelling..." : "Yes, cancel and refund"}
+              </button>
+              <button type="button" className="btn-secondary" disabled={cancelling} onClick={() => setConfirming(false)}>
+                Keep order
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="my-3 text-sm">
+            <button
+              type="button"
+              className="font-semibold text-red-700 underline underline-offset-4"
+              onClick={() => { setReason(reasons[0]); setConfirming(true); }}
+            >
+              Cancel order
+            </button>
+            <span className="text-ink-soft"> · possible until it ships</span>
+          </p>
+        )
+      ) : null}
+      </>
+      )}
+
       <ul className="order-items">
         {order.items.map((item) => (
           <li key={item.bookId} className="order-item">
@@ -273,7 +383,7 @@ function OrderCard({
               </p>
               <RatingLine avg={ratings[item.bookId]?.avg} count={ratings[item.bookId]?.count} />
             </div>
-            {!isAdmin ? <RateBook bookId={item.bookId} title={item.title} mine={myRatings[item.bookId] ?? 0} onRated={onRated} /> : null}
+            {!isAdmin && !order.cancelled ? <RateBook bookId={item.bookId} title={item.title} mine={myRatings[item.bookId] ?? 0} onRated={onRated} /> : null}
           </li>
         ))}
       </ul>

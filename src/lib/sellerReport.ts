@@ -28,7 +28,7 @@ export async function getSellerReport(scope: ReportScope = { kind: "store" }) {
   const sellerId = scope.kind === "seller" ? scope.sellerId : null;
   const bookWhere = sellerId ? { sellerId } : {};
   const orderHasMine = sellerId ? { items: { some: { book: { sellerId } } } } : {};
-  const [books, categories, paidOrders, pendingOrders] = await Promise.all([
+  const [books, categories, paidOrders, pendingOrders, cancelledOrders] = await Promise.all([
     prisma.book.findMany({ where: bookWhere, orderBy: { title: "asc" }, include: { seller: { select: { name: true } } } }),
     getCategories(),
     prisma.order.findMany({
@@ -37,6 +37,7 @@ export async function getSellerReport(scope: ReportScope = { kind: "store" }) {
       orderBy: { paidAt: "desc" },
     }),
     prisma.order.count({ where: { status: OrderStatus.PENDING, ...orderHasMine } }),
+    prisma.order.findMany({ where: { status: OrderStatus.CANCELLED, ...orderHasMine }, include: { items: true } }),
   ]);
 
   const catName = new Map(categories.map((c) => [c.id, c.name]));
@@ -106,6 +107,11 @@ export async function getSellerReport(scope: ReportScope = { kind: "store" }) {
     shippingCents: sellerId ? 0 : paidOrders.reduce((s, o) => s + o.shippingCents, 0),
     paidOrders: paidOrders.length,
     pendingOrders,
+    cancelledOrders: cancelledOrders.length,
+    refundedCents: cancelledOrders.reduce(
+      (s, o) => s + (sellerId ? o.items.filter((i) => mine.has(i.bookId)).reduce((t, i) => t + i.qty * i.unitPriceCents, 0) : o.totalCents),
+      0
+    ),
     unitsSold: rows.reduce((s, r) => s + r.unitsSold, 0),
     titles: rows.length,
     unitsInStock: rows.reduce((s, r) => s + r.stock, 0),

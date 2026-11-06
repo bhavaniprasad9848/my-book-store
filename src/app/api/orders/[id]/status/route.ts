@@ -29,10 +29,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ ok: true, email: { ok: false, status: "Order already has this status" } });
   }
 
-  const updated = await prisma.order.update({
-    where: { id },
+  // Only move orders that are still paid (not cancelled in the meantime).
+  const moved = await prisma.order.updateMany({
+    where: { id, status: OrderStatus.PAID },
     data: { shippingStatus: parsed.data.status, shippingUpdatedAt: new Date() },
   });
+  if (moved.count === 0) {
+    return NextResponse.json({ error: "This order was just cancelled" }, { status: 409 });
+  }
+  const updated = await prisma.order.findUniqueOrThrow({ where: { id } });
 
   const step = SHIPPING_STEPS.find((s) => s.status === parsed.data.status)!;
   const email = await sendShippingUpdateEmail({

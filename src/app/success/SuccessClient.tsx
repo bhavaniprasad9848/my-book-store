@@ -49,7 +49,7 @@ export default function SuccessClient() {
             ? new Date(data.order.paidAt).toLocaleString()
             : null,
         });
-        setMessage(data.email?.status || data.order.emailStatus || "Payment confirmed");
+        setMessage(data.cancelled ? "This order was cancelled. See My orders for the refund." : data.email?.status || data.order.emailStatus || "Payment confirmed");
         return;
       }
 

@@ -83,7 +83,12 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
           <Tile
             label={isStore ? "Paid orders" : "Orders with your books"}
             value={String(totals.paidOrders)}
-            note={totals.pendingOrders ? `${totals.pendingOrders} started but not paid` : "No unpaid checkouts"}
+            note={[
+              totals.cancelledOrders
+                ? `${totals.cancelledOrders} cancelled (${moneyFromCents(totals.refundedCents)} refunded)`
+                : "No cancellations",
+              totals.pendingOrders ? `${totals.pendingOrders} unpaid` : "",
+            ].filter(Boolean).join(" · ")}
           />
           <Tile label={isStore ? "Average order" : "Average per order"} value={moneyFromCents(totals.avgOrderCents)} />
         </section>

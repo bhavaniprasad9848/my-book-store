@@ -166,3 +166,36 @@ export async function sendShippingUpdateEmail(update: ShippingUpdate) {
     ? { ok: true, status: `Status saved and emailed to ${update.customerEmail}` }
     : { ok: false, status: `Status saved. Email failed: ${result.status}` };
 }
+
+/** Tells the customer their order was cancelled and what happens with the money. */
+export async function sendCancellationEmail(info: {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  by: "customer" | "admin";
+  refundStatus: string;
+  items: Array<{ title: string; qty: number }>;
+}) {
+  const text = [
+    `Hello ${info.customerName},`,
+    "",
+    info.by === "customer"
+      ? `Your MY BOOK STORE order ${info.id} has been cancelled, as you asked.`
+      : `We're sorry, your MY BOOK STORE order ${info.id} had to be cancelled by the store.`,
+    info.refundStatus,
+    "",
+    "Books in this order:",
+    ...info.items.map((item) => `- ${item.title} x${item.qty}`),
+    "",
+    "Thank you for shopping with MY BOOK STORE.",
+  ].join("\n");
+
+  if (!isEmailConfigured()) {
+    console.log("[mail] Email not configured. Cancellation email preview:\n", text);
+    return { ok: false, status: "Order cancelled. Email not sent because no email provider is set." };
+  }
+  const result = await sendMail({ to: info.customerEmail, subject: `Your MY BOOK STORE order was cancelled`, text });
+  return result.ok
+    ? { ok: true, status: `Cancellation email sent to ${info.customerEmail}` }
+    : { ok: false, status: `Order cancelled. Email failed: ${result.status}` };
+}

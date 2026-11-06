@@ -33,6 +33,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
+  if (order.status === OrderStatus.CANCELLED) {
+    return NextResponse.json({ order, cancelled: true });
+  }
   if (order.status === OrderStatus.PAID) {
     return NextResponse.json({ order, alreadyPaid: true });
   }
@@ -43,22 +46,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Payment not completed yet" }, { status: 400 });
   }
 
-  await prisma.$transaction(async (tx) => {
+  // Claim the order first so the webhook and this page can't both fulfill it.
+  const fulfilled = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.order.updateMany({
+      where: { id: order.id, status: OrderStatus.PENDING },
+      data: { status: OrderStatus.PAID, paidAt: new Date(), stripeSessionId: sessionId },
+    });
+    if (claimed.count === 0) return false;
     for (const item of order.items) {
       await tx.book.update({
         where: { id: item.bookId },
         data: { stock: { decrement: item.qty } },
       });
     }
-    await tx.order.update({
-      where: { id: order.id },
-      data: {
-        status: OrderStatus.PAID,
-        paidAt: new Date(),
-        stripeSessionId: sessionId,
-      },
-    });
+    return true;
   });
+  if (!fulfilled) {
+    const latest = await prisma.order.findUnique({ where: { id: order.id }, include: { items: true, user: true } });
+    return NextResponse.json({ order: latest, alreadyPaid: latest?.status === OrderStatus.PAID });
+  }
 
   const paidOrder = await prisma.order.findUnique({
     where: { id: order.id },

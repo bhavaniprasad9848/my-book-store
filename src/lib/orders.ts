@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { OrderStatus, ShippingStatus } from "@prisma/client";
 import { ratingSummaries, type RatingSummary } from "@/lib/ratings";
+import { canCancel } from "@/lib/cancelOrder";
 
 export const SHIPPING_STEPS: { status: ShippingStatus; label: string; detail: string }[] = [
   { status: ShippingStatus.PROCESSING, label: "Processing", detail: "Payment received. We are getting your books ready." },
@@ -20,6 +21,12 @@ export type OrderView = {
   totalCents: number;
   shippingStatus: ShippingStatus;
   shippingUpdatedAt: string | null;
+  cancelled: boolean;
+  canCancel: boolean;
+  cancelledAt: string | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  refundStatus: string | null;
   customer?: { name: string; email: string };
   items: { bookId: string; title: string; qty: number; unitPriceCents: number; category: string; author: string }[];
 };
@@ -30,11 +37,11 @@ export type OrdersPayload = {
   myRatings: Record<string, number>;
 };
 
-/** Paid orders for a customer, or every paid order for the owner. */
+/** Paid and cancelled orders for a customer, or every one of them for the admin. */
 export async function getOrdersFor(user: { id: string; isAdmin: boolean }): Promise<OrdersPayload> {
   const rows = await prisma.order.findMany({
-    where: { status: OrderStatus.PAID, ...(user.isAdmin ? {} : { userId: user.id }) },
-    orderBy: { paidAt: "desc" },
+    where: { status: { in: [OrderStatus.PAID, OrderStatus.CANCELLED] }, ...(user.isAdmin ? {} : { userId: user.id }) },
+    orderBy: { createdAt: "desc" },
     include: {
       items: { include: { book: { select: { category: true, author: true } } } },
       user: { select: { name: true, email: true } },
@@ -49,6 +56,12 @@ export async function getOrdersFor(user: { id: string; isAdmin: boolean }): Prom
     totalCents: o.totalCents,
     shippingStatus: o.shippingStatus,
     shippingUpdatedAt: o.shippingUpdatedAt ? o.shippingUpdatedAt.toISOString() : null,
+    cancelled: o.status === OrderStatus.CANCELLED,
+    canCancel: canCancel(o),
+    cancelledAt: o.cancelledAt ? o.cancelledAt.toISOString() : null,
+    cancelledBy: o.cancelledBy,
+    cancelReason: o.cancelReason,
+    refundStatus: o.refundStatus,
     customer: user.isAdmin ? { name: o.user.name, email: o.user.email } : undefined,
     items: o.items.map((i) => ({
       bookId: i.bookId,

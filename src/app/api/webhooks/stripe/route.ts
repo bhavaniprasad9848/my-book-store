@@ -15,9 +15,16 @@ async function fulfillOrder(session: Stripe.Checkout.Session) {
     where: { id: orderId },
     include: { items: true, user: true },
   });
-  if (!existing || existing.status === OrderStatus.PAID) return;
+  // Only orders still waiting for payment. A paid or cancelled order is never re-fulfilled.
+  if (!existing || existing.status !== OrderStatus.PENDING) return;
 
-  await prisma.$transaction(async (tx) => {
+  const fulfilled = await prisma.$transaction(async (tx) => {
+    // Claim the order first so the webhook and the success page can't both fulfill it.
+    const claimed = await tx.order.updateMany({
+      where: { id: orderId, status: OrderStatus.PENDING },
+      data: { status: OrderStatus.PAID, paidAt: new Date(), stripeSessionId: session.id },
+    });
+    if (claimed.count === 0) return false;
     for (const item of existing.items) {
       const book = await tx.book.findUnique({ where: { id: item.bookId } });
       if (!book || book.stock < item.qty) {
@@ -29,15 +36,9 @@ async function fulfillOrder(session: Stripe.Checkout.Session) {
       });
     }
 
-    await tx.order.update({
-      where: { id: orderId },
-      data: {
-        status: OrderStatus.PAID,
-        paidAt: new Date(),
-        stripeSessionId: session.id,
-      },
-    });
+    return true;
   });
+  if (!fulfilled) return;
 
   const paidOrder = await prisma.order.findUnique({
     where: { id: orderId },
