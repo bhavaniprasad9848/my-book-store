@@ -1,10 +1,82 @@
 import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { moneyFromCents } from "@/lib/catalog";
 
 /** Returns the Resend key, ignoring the "re_..." placeholder from .env.example. */
 function resendKey() {
   const key = process.env.RESEND_API_KEY ?? "";
   return /^re_[A-Za-z0-9_]{10,}$/.test(key) ? key : "";
+}
+
+/** Gmail (or any SMTP) is used when SMTP_USER and SMTP_PASS are set. */
+function smtpConfigured() {
+  return Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+export function isEmailConfigured() {
+  return smtpConfigured() || Boolean(resendKey());
+}
+
+/**
+ * Sends one plain-text email. Prefers SMTP (e.g. Gmail with an App Password),
+ * falls back to Resend. Returns { ok, status } and never throws.
+ */
+export async function sendMail({ to, subject, text }: { to: string; subject: string; text: string }) {
+  try {
+    if (smtpConfigured()) {
+      const port = Number(process.env.SMTP_PORT || 465);
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port,
+        secure: port === 465,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      });
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || `MY BOOK STORE <${process.env.SMTP_USER}>`,
+        to,
+        subject,
+        text,
+      });
+      return { ok: true, status: `Email sent to ${to}` };
+    }
+
+    const apiKey = resendKey();
+    if (apiKey) {
+      const resend = new Resend(apiKey);
+      const result = await resend.emails.send({
+        from: process.env.EMAIL_FROM || "MY BOOK STORE <onboarding@resend.dev>",
+        to,
+        subject,
+        text,
+      });
+      if (result.error) return { ok: false, status: result.error.message };
+      return { ok: true, status: `Email sent to ${to}` };
+    }
+
+    console.log(`[mail] No email provider configured. Would send to ${to}: ${subject}\n${text}`);
+    return { ok: false, status: "Email not configured. Add SMTP_USER/SMTP_PASS or RESEND_API_KEY." };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to send email";
+    console.error("[mail] send failed:", message);
+    return { ok: false, status: message };
+  }
+}
+
+export async function sendOtpEmail(to: string, code: string, reason: string, minutes: number) {
+  return sendMail({
+    to,
+    subject: `${code} is your MY BOOK STORE code`,
+    text: [
+      `Your one-time code is: ${code}`,
+      "",
+      reason,
+      `It expires in ${minutes} minutes and can be used once.`,
+      "",
+      "If you didn't ask for this, you can ignore this email. Never share this code with anyone.",
+      "",
+      "MY BOOK STORE",
+    ].join("\n"),
+  });
 }
 
 type ReceiptOrder = {
@@ -43,38 +115,16 @@ export function buildReceiptText(order: ReceiptOrder) {
 }
 
 export async function sendReceiptEmail(order: ReceiptOrder) {
-  const apiKey = resendKey();
-  const from = process.env.EMAIL_FROM || "MY BOOK STORE <onboarding@resend.dev>";
-
-  if (!apiKey) {
-    console.log("[mail] RESEND_API_KEY missing. Receipt preview:\n", buildReceiptText(order));
-    return {
-      ok: false,
-      status: "Email not configured. Add RESEND_API_KEY to send Gmail receipts.",
-    };
+  if (!isEmailConfigured()) {
+    console.log("[mail] Email not configured. Receipt preview:\n", buildReceiptText(order));
+    return { ok: false, status: "Email not configured. Add SMTP_USER/SMTP_PASS to send Gmail receipts." };
   }
-
-  try {
-    const resend = new Resend(apiKey);
-    const result = await resend.emails.send({
-      from,
-      to: order.customerEmail,
-      subject: `MY BOOK STORE Receipt — ${order.id}`,
-      text: buildReceiptText(order),
-    });
-
-    if (result.error) {
-      return { ok: false, status: result.error.message };
-    }
-
-    return {
-      ok: true,
-      status: `Receipt emailed to ${order.customerEmail}`,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to send email";
-    return { ok: false, status: message };
-  }
+  const result = await sendMail({
+    to: order.customerEmail,
+    subject: `MY BOOK STORE Receipt — ${order.id}`,
+    text: buildReceiptText(order),
+  });
+  return result.ok ? { ok: true, status: `Receipt emailed to ${order.customerEmail}` } : result;
 }
 
 type ShippingUpdate = {
@@ -103,26 +153,16 @@ export function buildShippingUpdateText(update: ShippingUpdate) {
 
 /** Emails the customer whenever the owner moves their order to a new shipping step. */
 export async function sendShippingUpdateEmail(update: ShippingUpdate) {
-  const apiKey = resendKey();
-  const from = process.env.EMAIL_FROM || "MY BOOK STORE <onboarding@resend.dev>";
-
-  if (!apiKey) {
-    console.log("[mail] RESEND_API_KEY missing. Status email preview:\n", buildShippingUpdateText(update));
-    return { ok: false, status: "Status saved. Email not sent because RESEND_API_KEY is not set." };
+  if (!isEmailConfigured()) {
+    console.log("[mail] Email not configured. Status email preview:\n", buildShippingUpdateText(update));
+    return { ok: false, status: "Status saved. Email not sent because no email provider is set." };
   }
-
-  try {
-    const resend = new Resend(apiKey);
-    const result = await resend.emails.send({
-      from,
-      to: update.customerEmail,
-      subject: `Your MY BOOK STORE order is ${update.statusLabel.toLowerCase()}`,
-      text: buildShippingUpdateText(update),
-    });
-    if (result.error) return { ok: false, status: `Status saved. Email failed: ${result.error.message}` };
-    return { ok: true, status: `Status saved and emailed to ${update.customerEmail}` };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to send email";
-    return { ok: false, status: `Status saved. Email failed: ${message}` };
-  }
+  const result = await sendMail({
+    to: update.customerEmail,
+    subject: `Your MY BOOK STORE order is ${update.statusLabel.toLowerCase()}`,
+    text: buildShippingUpdateText(update),
+  });
+  return result.ok
+    ? { ok: true, status: `Status saved and emailed to ${update.customerEmail}` }
+    : { ok: false, status: `Status saved. Email failed: ${result.status}` };
 }

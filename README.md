@@ -3,7 +3,8 @@
 Full-stack bookstore with:
 
 - Auth.js email/password login
-- Prisma + SQLite database
+- Prisma + PostgreSQL (Neon) database
+- Email one-time codes (OTP) for sign-in, sign-up and order confirmation
 - Owner-only book inventory (`bhavaniprasad9848@gmail.com`)
 - Stripe Checkout payments
 - Resend receipt emails
@@ -41,8 +42,7 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ### Seeded owner account
 - Email: `bhavaniprasad9848@gmail.com`
-- Password: `OwnerPass123!`
-- Change this password after first login in production.
+- Password: set in `prisma/seed.ts` — change it after first login.
 
 Customers can register at `/register`.
 
@@ -67,6 +67,15 @@ Without Stripe/Resend keys you can still:
 - use cart
 
 Checkout and Gmail receipts activate after keys are added.
+
+## One-time codes (OTP)
+
+- **Sign in:** email + password, then a 6-digit code emailed to you.
+- **Sign up:** after creating the account, the code confirms your email.
+- **Checkout:** a code emailed to you confirms the exact cart before Stripe opens.
+
+Codes expire after 10 minutes, work once, allow 5 wrong tries, and can be resent every 45 seconds.
+If no email provider is set (`SMTP_*` or `RESEND_API_KEY`), the app runs in **demo mode** and shows the code on screen.
 
 ## Stripe test flow
 

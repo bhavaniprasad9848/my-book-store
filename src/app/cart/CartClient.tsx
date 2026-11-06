@@ -8,6 +8,7 @@ import { useCart } from "@/lib/cart";
 import { calcShippingCents, moneyFromCents } from "@/lib/catalog";
 import { BookJacket } from "@/components/BookJacket";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { OtpCodeForm, readOtpResponse, type OtpRequestResult } from "@/components/OtpCodeForm";
 
 type Book = {
   id: string;
@@ -27,6 +28,7 @@ export default function CartPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string[]>([]);
+  const [otpInfo, setOtpInfo] = useState<OtpRequestResult | null>(null);
 
   function removeWithAnimation(bookId: string) {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -100,28 +102,60 @@ export default function CartPage() {
   const shippingCents = calcShippingCents(subtotalCents);
   const totalCents = subtotalCents + shippingCents;
 
-  async function checkout() {
+  const cartItems = useMemo(() => rows.map((row) => ({ bookId: row.bookId, qty: row.qty })), [rows]);
+  const cartKey = cartItems.map((item) => `${item.bookId}:${item.qty}`).join(",");
+
+  // A code confirms one exact cart, so changing the cart cancels the pending code.
+  useEffect(() => {
+    setOtpInfo(null);
+  }, [cartKey]);
+
+  async function requestOrderCode(): Promise<OtpRequestResult> {
+    try {
+      const res = await fetch("/api/otp/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: cartItems }),
+      });
+      return await readOtpResponse(res);
+    } catch {
+      return { ok: false, error: "Network error. Please try again." };
+    }
+  }
+
+  async function startCheckout() {
     setBusy(true);
     setError("");
+    const result = await requestOrderCode();
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error || "Couldn't send the confirmation code.");
+      return;
+    }
+    setOtpInfo(result);
+  }
+
+  async function confirmAndPay(otp: string) {
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: rows.map((row) => ({ bookId: row.bookId, qty: row.qty })),
-        }),
+        body: JSON.stringify({ items: cartItems, otp }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ error: "Checkout failed. Please log in again." }));
       if (!res.ok) {
-        setError(data.error || "Checkout failed");
-        return;
+        if (!data.otpError) {
+          setOtpInfo(null);
+          setError(data.error || "Checkout failed");
+          return null;
+        }
+        return data.error || "That code didn't work.";
       }
       clear();
       window.location.href = data.url;
+      return null;
     } catch {
-      setError("Checkout failed. Please refresh the page, log in again, and retry.");
-    } finally {
-      setBusy(false);
+      return "Checkout failed. Please refresh the page, log in again, and retry.";
     }
   }
 
@@ -254,14 +288,32 @@ export default function CartPage() {
                 </div>
               </div>
               {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
-              <button
-                className="btn-primary mt-4 w-full"
-                type="button"
-                disabled={busy || rows.length === 0}
-                onClick={checkout}
-              >
-                {busy ? "Redirecting to Stripe..." : "Pay with Stripe Checkout"}
-              </button>
+              {otpInfo ? (
+                <div className="mt-4 border-t border-black/10 pt-4">
+                  <OtpCodeForm
+                    className="[&_h2]:text-xl"
+                    title="Confirm your order"
+                    description="Enter the 6-digit code we emailed to confirm this order before paying."
+                    sentTo={otpInfo.sentTo}
+                    devCode={otpInfo.devCode}
+                    submitLabel="Confirm and pay"
+                    busyLabel="Redirecting to Stripe..."
+                    onVerify={confirmAndPay}
+                    onResend={requestOrderCode}
+                    onBack={() => setOtpInfo(null)}
+                    backLabel="Cancel"
+                  />
+                </div>
+              ) : (
+                <button
+                  className="btn-primary mt-4 w-full"
+                  type="button"
+                  disabled={busy || rows.length === 0}
+                  onClick={startCheckout}
+                >
+                  {busy ? "Sending confirmation code..." : "Pay with Stripe Checkout"}
+                </button>
+              )}
               <p className="mt-3 text-xs text-ink-soft">
                 Prices are calculated on the server from the database. Use Stripe test card 4242 4242 4242 4242.
               </p>

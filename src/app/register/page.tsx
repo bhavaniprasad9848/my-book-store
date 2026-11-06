@@ -2,17 +2,21 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { AuthShowcase } from "@/components/AuthShowcase";
 import { AuthBackdrop } from "@/components/AuthBackdrop";
 import { ErrorNote, PasswordField, Spinner, TextField } from "@/components/AuthFields";
+import { OtpCodeForm, type OtpRequestResult } from "@/components/OtpCodeForm";
+import { requestLoginOtp, verifyLoginOtp } from "@/lib/loginOtp";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [failures, setFailures] = useState(0);
+  const [step, setStep] = useState<"details" | "code">("details");
+  const [creds, setCreds] = useState({ email: "", password: "" });
+  const [otpInfo, setOtpInfo] = useState<OtpRequestResult>({});
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,12 +29,19 @@ export default function RegisterPage() {
       password: String(form.get("password") || ""),
     };
 
-    const res = await fetch("/api/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
+    let res: Response;
+    try {
+      res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setBusy(false);
+      setError("Network error. Please try again.");
+      return;
+    }
+    const data = await res.json().catch(() => ({ error: "Server error. Please try again." }));
     if (!res.ok) {
       setBusy(false);
       setError(data.error || "Registration failed");
@@ -38,19 +49,28 @@ export default function RegisterPage() {
       return;
     }
 
-    const login = await signIn("credentials", {
-      email: payload.email,
-      password: payload.password,
-      redirect: false,
-    });
+    // Verify the email address with a one-time code before signing in.
+    const otp = await requestLoginOtp(payload.email, payload.password);
     setBusy(false);
-    if (login?.error) {
-      setError("Account created, but login failed. Try signing in.");
+    if (!otp.ok) {
+      setError(`Account created, but we couldn't send a code: ${otp.error}. Try signing in.`);
       setFailures((n) => n + 1);
       return;
     }
+    setCreds({ email: payload.email, password: payload.password });
+    setOtpInfo(otp);
+    setStep("code");
+  }
+
+  async function onVerify(code: string) {
+    const message = await verifyLoginOtp(creds.email, creds.password, code);
+    if (message) {
+      setFailures((n) => n + 1);
+      return message;
+    }
     router.push("/shop");
     router.refresh();
+    return null;
   }
 
   return (
@@ -62,26 +82,41 @@ export default function RegisterPage() {
         subtitle="A free account keeps your cart, lets you check out securely and sends a receipt by email."
       />
 
-      <form onSubmit={onSubmit} className={`panel auth-form flex flex-col justify-center p-8 sm:p-10 ${failures ? (failures % 2 ? "shake-a" : "shake-b") : ""} ${busy ? "is-busy" : ""}`}>
-        <span className="form-progress" aria-hidden="true" />
-        <h1 className="font-display text-3xl">Create an account</h1>
-        <p className="mt-2 text-ink-soft">It takes less than a minute.</p>
-        <div className="mt-6 grid gap-4">
-          <TextField label="Full name" name="name" kind="user" placeholder="Your name" autoComplete="name" />
-          <TextField label="Email / Gmail" name="email" type="email" kind="mail" placeholder="you@gmail.com" autoComplete="email" />
-          <PasswordField autoComplete="new-password" showStrength />
-          <ErrorNote message={error} />
-          <button className="btn-primary h-12 text-base" type="submit" disabled={busy}>
-            {busy ? (<><Spinner />Creating account...</>) : "Create account"}
-          </button>
+      {step === "code" ? (
+        <div className={`panel auth-form flex flex-col justify-center p-8 sm:p-10 ${failures ? (failures % 2 ? "shake-a" : "shake-b") : ""}`}>
+          <OtpCodeForm
+            title="Verify your email"
+            description="Your account is ready. Enter the 6-digit code to confirm your email and sign in."
+            sentTo={otpInfo.sentTo}
+            devCode={otpInfo.devCode}
+            submitLabel="Verify and continue"
+            busyLabel="Verifying..."
+            onVerify={onVerify}
+            onResend={() => requestLoginOtp(creds.email, creds.password)}
+          />
         </div>
-        <p className="mt-6 text-sm text-ink-soft">
-          Already have an account?{" "}
-          <Link href="/login" className="font-semibold text-forest underline underline-offset-4">
-            Login
-          </Link>
-        </p>
-      </form>
+      ) : (
+        <form onSubmit={onSubmit} className={`panel auth-form flex flex-col justify-center p-8 sm:p-10 ${failures ? (failures % 2 ? "shake-a" : "shake-b") : ""} ${busy ? "is-busy" : ""}`}>
+          <span className="form-progress" aria-hidden="true" />
+          <h1 className="font-display text-3xl">Create an account</h1>
+          <p className="mt-2 text-ink-soft">It takes less than a minute.</p>
+          <div className="mt-6 grid gap-4">
+            <TextField label="Full name" name="name" kind="user" placeholder="Your name" autoComplete="name" />
+            <TextField label="Email / Gmail" name="email" type="email" kind="mail" placeholder="you@gmail.com" autoComplete="email" />
+            <PasswordField autoComplete="new-password" showStrength />
+            <ErrorNote message={error} />
+            <button className="btn-primary h-12 text-base" type="submit" disabled={busy}>
+              {busy ? (<><Spinner />Creating account...</>) : "Create account"}
+            </button>
+          </div>
+          <p className="mt-6 text-sm text-ink-soft">
+            Already have an account?{" "}
+            <Link href="/login" className="font-semibold text-forest underline underline-offset-4">
+              Login
+            </Link>
+          </p>
+        </form>
+      )}
     </main>
     </>
   );

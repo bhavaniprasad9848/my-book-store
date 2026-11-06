@@ -1,13 +1,20 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/lib/auth.config";
+import { verifyOtp } from "@/lib/otp";
+
+/** Lets the login page tell "wrong code" apart from "wrong password". */
+class InvalidOtpError extends CredentialsSignin {
+  code = "invalid_otp";
+}
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+  otp: z.string(),
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -18,6 +25,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        otp: { label: "Code", type: "text" },
       },
       async authorize(raw) {
         const parsed = credentialsSchema.safeParse(raw);
@@ -29,6 +37,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!valid) return null;
+
+        // Second step: the 6-digit code emailed by /api/otp/login.
+        const check = await verifyOtp(email, "LOGIN", parsed.data.otp);
+        if (!check.ok) {
+          const err = new InvalidOtpError();
+          err.code = check.error;
+          throw err;
+        }
 
         return {
           id: user.id,

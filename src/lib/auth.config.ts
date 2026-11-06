@@ -51,6 +51,7 @@ export const authConfig = {
         pathname.startsWith("/register") ||
         pathname.startsWith("/api/auth") ||
         pathname.startsWith("/api/register") ||
+        pathname.startsWith("/api/otp/login") ||
         pathname.startsWith("/api/webhooks");
 
       if (isPublic) return true;

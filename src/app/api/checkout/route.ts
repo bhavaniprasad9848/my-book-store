@@ -2,18 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calcShippingCents } from "@/lib/catalog";
+import { cartContext, cartItemsSchema, priceCart } from "@/lib/checkoutCart";
+import { verifyOtp } from "@/lib/otp";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 
 const schema = z.object({
-  items: z
-    .array(
-      z.object({
-        bookId: z.string().min(1),
-        qty: z.number().int().positive(),
-      })
-    )
-    .min(1),
+  items: cartItemsSchema,
+  otp: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
 });
 
 export async function POST(request: Request) {
@@ -35,41 +30,26 @@ export async function POST(request: Request) {
   const body = await request.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Cart is empty or invalid" }, { status: 400 });
+    return NextResponse.json({ error: parsed.error?.issues[0]?.path[0] === "otp" ? "Enter the 6-digit code" : "Cart is empty or invalid" }, { status: 400 });
   }
 
-  const bookIds = parsed.data.items.map((item) => item.bookId);
-  const books = await prisma.book.findMany({ where: { id: { in: bookIds } } });
-  const bookMap = new Map(books.map((book) => [book.id, book]));
-
-  const lineItems: Array<{ bookId: string; title: string; unitPriceCents: number; qty: number }> =
-    [];
-
-  for (const item of parsed.data.items) {
-    const book = bookMap.get(item.bookId);
-    if (!book) {
-      return NextResponse.json({ error: "A book in your cart no longer exists" }, { status: 400 });
-    }
-    if (book.stock < item.qty) {
-      return NextResponse.json(
-        { error: `Not enough stock for "${book.title}" (available: ${book.stock})` },
-        { status: 400 }
-      );
-    }
-    lineItems.push({
-      bookId: book.id,
-      title: book.title,
-      unitPriceCents: book.priceCents,
-      qty: item.qty,
-    });
+  const priced = await priceCart(parsed.data.items);
+  if (!priced.ok) {
+    return NextResponse.json({ error: priced.error }, { status: 400 });
   }
 
-  const subtotalCents = lineItems.reduce(
-    (sum, item) => sum + item.unitPriceCents * item.qty,
-    0
+  // Order confirmation: the emailed code must match this exact cart.
+  const check = await verifyOtp(
+    session.user.email.toLowerCase(),
+    "CHECKOUT",
+    parsed.data.otp,
+    cartContext(parsed.data.items)
   );
-  const shippingCents = calcShippingCents(subtotalCents);
-  const totalCents = subtotalCents + shippingCents;
+  if (!check.ok) {
+    return NextResponse.json({ error: check.error, otpError: true }, { status: 400 });
+  }
+
+  const { lineItems, subtotalCents, shippingCents, totalCents } = priced;
 
   const order = await prisma.order.create({
     data: {
