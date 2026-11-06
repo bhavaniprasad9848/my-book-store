@@ -8,6 +8,7 @@ const schema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
+  accountType: z.enum(["customer", "seller"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -24,8 +25,8 @@ export async function POST(request: Request) {
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  const role =
-    email === "bhavaniprasad9848@gmail.com" ? Role.ADMIN : Role.CUSTOMER;
+  // Sign-up creates customer or seller accounts only. The admin account comes from the seed.
+  const role = parsed.data.accountType === "seller" ? Role.SELLER : Role.CUSTOMER;
 
   const user = await prisma.user.create({
     data: {

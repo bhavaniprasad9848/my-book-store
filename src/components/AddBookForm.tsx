@@ -42,7 +42,7 @@ export function AddBookForm({ category }: { category: string }) {
   return (
     <section className="panel mt-5 p-5">
       <h3 className="font-display text-xl">Add a new book</h3>
-      <p className="mt-1 text-sm text-ink-soft">Owner-only inventory form for this section.</p>
+      <p className="mt-1 text-sm text-ink-soft">Add a book to this shelf. It goes on sale right away.</p>
       <form onSubmit={onSubmit} className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="grid gap-1 text-sm">
           Title

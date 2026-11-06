@@ -30,6 +30,9 @@ export default async function ShopPage({
   const params = await searchParams;
   const active = params.category || "all";
   const isAdmin = session.user.role === Role.ADMIN;
+  const isSeller = session.user.role === Role.SELLER;
+  const canAdd = isAdmin || isSeller;
+  const canBuy = session.user.role === Role.CUSTOMER;
   const categories = await getCategories();
   const activeCat = categories.find((c) => c.id === active);
   const q = (params.q || "").trim().slice(0, 80);
@@ -79,9 +82,11 @@ export default async function ShopPage({
 
         {isAdmin ? (
           <>
-            <p className="admin-note">You are signed in as the owner. Each shelf has a form at the end for adding new titles.</p>
+            <p className="admin-note">You are signed in as the admin. Each shelf has a form at the end for adding store books, and you can add new categories below.</p>
             <AddCategoryForm />
           </>
+        ) : isSeller ? (
+          <p className="admin-note">You are signed in as a seller. Use the form at the end of any shelf to list a book. Your stock and sales are on your Dashboard.</p>
         ) : null}
 
         <LiveStockProvider initial={initialStock}>
@@ -89,7 +94,7 @@ export default async function ShopPage({
         {active === "all" ? (
           categories.map((cat) => {
             const sectionBooks = books.filter((book) => book.category === cat.id);
-            if (sectionBooks.length === 0 && (q || !isAdmin)) return null;
+            if (sectionBooks.length === 0 && (q || !canAdd)) return null;
             return (
               <section key={cat.id} className="shelf-section">
                 <CategoryBanner
@@ -101,10 +106,10 @@ export default async function ShopPage({
                 />
                 <div className="book-grid reveal">
                   {sectionBooks.map((book, i) => (
-                    <BookCard key={book.id} index={i} rating={ratings[book.id]} book={{ ...book, categoryName: cat.name }} />
+                    <BookCard key={book.id} index={i} rating={ratings[book.id]} canBuy={canBuy} book={{ ...book, categoryName: cat.name }} />
                   ))}
                 </div>
-                {isAdmin ? <AddBookForm category={cat.id} /> : null}
+                {canAdd ? <AddBookForm category={cat.id} /> : null}
               </section>
             );
           })
@@ -122,6 +127,7 @@ export default async function ShopPage({
                 {books.map((book, i) => (
                   <BookCard
                     key={book.id}
+                    canBuy={canBuy}
                     index={i}
                     rating={ratings[book.id]}
                     book={{ ...book, categoryName: activeCat?.name || book.category }}
@@ -129,7 +135,7 @@ export default async function ShopPage({
                 ))}
               </div>
             )}
-            {isAdmin ? <AddBookForm category={active} /> : null}
+            {canAdd ? <AddBookForm category={active} /> : null}
           </section>
         )}
         </LiveStockProvider>

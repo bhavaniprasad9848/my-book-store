@@ -9,6 +9,7 @@ datasource db {
 
 enum Role {
   CUSTOMER
+  SELLER
   ADMIN
 }
 
@@ -35,6 +36,7 @@ model User {
   updatedAt    DateTime @updatedAt
   orders       Order[]
   ratings      Rating[]
+  books        Book[]   @relation("SellerBooks")
 }
 
 model Book {
@@ -47,6 +49,9 @@ model Book {
   description String
   category    String
   stock       Int      @default(5)
+  /// Null = a store book added by the admin. Otherwise the seller who listed it.
+  sellerId    String?
+  seller      User?    @relation("SellerBooks", fields: [sellerId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   orderItems  OrderItem[]

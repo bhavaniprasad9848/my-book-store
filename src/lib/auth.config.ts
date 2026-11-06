@@ -48,6 +48,10 @@ export const authConfig = {
       const isLoggedIn = Boolean(auth?.user);
       const isPublic =
         pathname.startsWith("/login") ||
+        pathname.startsWith("/seller/login") ||
+        pathname.startsWith("/seller/register") ||
+        pathname.startsWith("/admin/login") ||
+        pathname.startsWith("/owner/login") ||
         pathname.startsWith("/register") ||
         pathname.startsWith("/api/auth") ||
         pathname.startsWith("/api/register") ||

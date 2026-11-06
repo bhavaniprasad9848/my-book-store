@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { Role } from "@prisma/client";
 import { cartContext, cartItemsSchema, priceCart } from "@/lib/checkoutCart";
 import { createOtp, maskEmail, OTP_TTL_MINUTES } from "@/lib/otp";
 import { isEmailConfigured, sendOtpEmail } from "@/lib/mail";
@@ -14,6 +15,9 @@ export async function POST(request: Request) {
   const email = session?.user?.email?.toLowerCase();
   if (!session?.user?.id || !email) {
     return NextResponse.json({ error: "Please login first" }, { status: 401 });
+  }
+  if (session.user.role !== Role.CUSTOMER) {
+    return NextResponse.json({ error: "Only customer accounts can buy books. Sign in on the customer page to shop." }, { status: 403 });
   }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));

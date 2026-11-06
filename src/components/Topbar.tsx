@@ -9,6 +9,10 @@ import { openCartDrawer } from "@/components/CartDrawer";
 
 export function Topbar() {
   const { data } = useSession();
+  const role = data?.user?.role;
+  const isAdmin = role === "ADMIN";
+  const isSeller = role === "SELLER";
+  const isStaff = isAdmin || isSeller;
   const { count } = useCart();
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -35,39 +39,75 @@ export function Topbar() {
     <>
     <header className={`site-header ${scrolled ? "is-scrolled" : ""}`}>
       <div className="site-header-inner">
-        <Link href="/shop" className="wordmark">
+        <Link href={isAdmin ? "/admin" : isSeller ? "/seller" : "/shop"} className="wordmark">
           My Book Store
         </Link>
         <nav className="flex items-center gap-4 text-[15px] sm:gap-6">
-          <Link href="/shop" className={linkClass("/shop")}>
-            Shop
-          </Link>
-          {data?.user ? (
-            <Link href="/orders" className={linkClass("/orders")}>
-              {data.user.role === "ADMIN" ? "Orders" : "My orders"}
-            </Link>
-          ) : null}
-          <Link
-            href="/cart"
-            id="cart-link"
-            className={linkClass("/cart")}
-            onClick={(e) => {
-              if (pathname?.startsWith("/cart") || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-              e.preventDefault();
-              openCartDrawer();
-            }}
-          >
-            Cart
-            <span className="cart-count" aria-label={`${count} items in cart`}>
-              <span key={count} className="cart-count-num">
-                {count}
-              </span>
-            </span>
-          </Link>
+          {isAdmin ? (
+            <>
+              <Link href="/admin" className={linkClass("/admin")}>
+                Dashboard
+              </Link>
+              <Link href="/shop" className={linkClass("/shop")}>
+                Books
+              </Link>
+              <Link href="/orders" className={linkClass("/orders")}>
+                Orders
+              </Link>
+            </>
+          ) : isSeller ? (
+            <>
+              <Link href="/seller" className={linkClass("/seller")}>
+                My dashboard
+              </Link>
+              <Link href="/shop" className={linkClass("/shop")}>
+                List a book
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/shop" className={linkClass("/shop")}>
+                Shop
+              </Link>
+              {data?.user ? (
+                <Link href="/orders" className={linkClass("/orders")}>
+                  My orders
+                </Link>
+              ) : null}
+              <Link
+                href="/cart"
+                id="cart-link"
+                className={linkClass("/cart")}
+                onClick={(e) => {
+                  if (pathname?.startsWith("/cart") || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                  e.preventDefault();
+                  openCartDrawer();
+                }}
+              >
+                Cart
+                <span className="cart-count" aria-label={`${count} items in cart`}>
+                  <span key={count} className="cart-count-num">
+                    {count}
+                  </span>
+                </span>
+              </Link>
+            </>
+          )}
           {data?.user ? (
             <span className="hidden items-center gap-4 sm:flex">
               <span className="text-ink-soft">{data.user.name}</span>
-              <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="nav-link">
+              {isStaff ? (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-white ${isAdmin ? "bg-ink" : "bg-forest"}`}
+                >
+                  {isAdmin ? "Admin" : "Seller"}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: isAdmin ? "/admin/login" : isSeller ? "/seller/login" : "/login" })}
+                className="nav-link"
+              >
                 Sign out
               </button>
             </span>

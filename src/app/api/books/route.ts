@@ -30,8 +30,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== Role.ADMIN) {
-    return NextResponse.json({ error: "Only the store owner can add books" }, { status: 403 });
+  const role = session?.user?.role;
+  if (!session?.user?.id || (role !== Role.ADMIN && role !== Role.SELLER)) {
+    return NextResponse.json({ error: "Only sellers and the admin can add books" }, { status: 403 });
   }
 
   const body = await request.json();
@@ -54,6 +55,8 @@ export async function POST(request: Request) {
       pages: parsed.data.pages,
       priceCents: Math.round(parsed.data.price * 100),
       stock: parsed.data.stock,
+      // Sellers own the books they list; books the admin adds belong to the store.
+      sellerId: role === Role.SELLER ? session.user.id : null,
     },
   });
 

@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 
-/** Owner-only panel for adding a new category shelf. */
+/** Admin-only panel for adding a new category shelf. */
 export function AddCategoryForm() {
   const router = useRouter();
   const [open, setOpen] = useState(false);

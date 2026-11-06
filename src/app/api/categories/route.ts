@@ -15,11 +15,11 @@ export async function GET() {
   return NextResponse.json({ categories: await getCategories() });
 }
 
-/** Owner only: add a new category shelf. */
+/** Admin only: add a new category shelf. */
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user || session.user.role !== Role.ADMIN) {
-    return NextResponse.json({ error: "Only the store owner can add categories" }, { status: 403 });
+    return NextResponse.json({ error: "Only the admin can add categories" }, { status: 403 });
   }
 
   const parsed = schema.safeParse(await request.json().catch(() => ({})));

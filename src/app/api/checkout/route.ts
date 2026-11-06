@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cartContext, cartItemsSchema, priceCart } from "@/lib/checkoutCart";
 import { verifyOtp } from "@/lib/otp";
@@ -15,6 +16,9 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.json({ error: "Please login first" }, { status: 401 });
+  }
+  if (session.user.role !== Role.CUSTOMER) {
+    return NextResponse.json({ error: "Only customer accounts can buy books. Sign in on the customer page to shop." }, { status: 403 });
   }
 
   if (!isStripeConfigured()) {

@@ -8,11 +8,11 @@ import { sendShippingUpdateEmail } from "@/lib/mail";
 
 const schema = z.object({ status: z.nativeEnum(ShippingStatus) });
 
-/** Owner only: move an order to a shipping step and email the customer. */
+/** Admin only: move an order to a shipping step and email the customer. */
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user || session.user.role !== Role.ADMIN) {
-    return NextResponse.json({ error: "Only the store owner can update orders" }, { status: 403 });
+    return NextResponse.json({ error: "Only the admin can update orders" }, { status: 403 });
   }
 
   const parsed = schema.safeParse(await request.json().catch(() => ({})));

@@ -26,6 +26,8 @@ type BookCardProps = {
   };
   index?: number;
   rating?: { avg: number; count: number };
+  /** Sellers manage stock; only customers can add books to a cart. */
+  canBuy?: boolean;
 };
 
 function stockText(stock: number) {
@@ -34,7 +36,7 @@ function stockText(stock: number) {
   return `${stock} in stock`;
 }
 
-export function BookCard({ book, index, rating }: BookCardProps) {
+export function BookCard({ book, index, rating, canBuy = true }: BookCardProps) {
   const { addItem, items } = useCart();
   const [added, setAdded] = useState(false);
   const coverRef = useRef<HTMLDivElement>(null);
@@ -84,6 +86,7 @@ export function BookCard({ book, index, rating }: BookCardProps) {
         </p>
         <div className="book-buy">
           <span className="book-price">{moneyFromCents(book.priceCents)}</span>
+          {canBuy ? (
           <button
             type="button"
             className={`btn-add ${added ? "is-added" : ""}`}
@@ -99,6 +102,9 @@ export function BookCard({ book, index, rating }: BookCardProps) {
           >
             {soldOut ? "Sold out" : added ? "Added to cart" : allInCart ? "All in your cart" : "Add to cart"}
           </button>
+          ) : (
+            <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-semibold text-ink-soft">Customers buy here</span>
+          )}
         </div>
       </div>
     </article>
