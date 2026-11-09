@@ -1293,7 +1293,7 @@ a.marquee-item:hover .marquee-cover { box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 8
 
 @media (prefers-reduced-motion: reduce) {
   .marquee-track, .hero-book, .book3d, .book3d-shadow, .kpi-tile, .dash-panel, .dash-row, .chart-bar, .pulse-dot::after { animation: none; }
-  .marquee { -webkit-mask-image: none; mask-image: none; overflow-x: auto; }
+  .marquee { -webkit-mask-image: none; mask-image: none; }
   .marquee-item, .kpi-tile, .spotlight::before { transition: none; }
 }
 
