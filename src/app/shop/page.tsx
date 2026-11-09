@@ -10,6 +10,7 @@ import { Topbar } from "@/components/Topbar";
 import { BookCard } from "@/components/BookCard";
 import { AddBookForm } from "@/components/AddBookForm";
 import { ShopHero } from "@/components/ShopHero";
+import { BookMarquee } from "@/components/BookMarquee";
 import { CategoryBanner } from "@/components/CategoryBanner";
 import { Role } from "@prisma/client";
 import { RevealOnScroll } from "@/components/RevealOnScroll";
@@ -63,13 +64,27 @@ export default async function ShopPage({
       <Topbar />
       <main className="page">
         {active === "all" && !q ? <ShopHero bookCount={books.length} /> : null}
+        {active === "all" && !q && books.length > 0 ? (
+          <section className="fresh-strip" aria-label="Fresh on the shelves">
+            <h2 className="fresh-title">Fresh on the shelves</h2>
+            <BookMarquee
+              books={[...books]
+                .sort((a, b) => +b.createdAt - +a.createdAt)
+                .slice(0, 16)
+                .map((b) => ({ id: b.id, title: b.title, author: b.author, category: b.category }))}
+              seconds={60}
+              linkToShelf
+              label="Recently added books, moving slowly. Hover to pause."
+            />
+          </section>
+        ) : null}
 
         <div id="shelves" className="shop-toolbar">
           <nav className="tabs" aria-label="Book categories">
             {tab("all", "All books")}
             {categories.map((cat) => tab(cat.id, shortName(cat.name)))}
           </nav>
-          <ShopSearch />
+          <ShopSearch suggestions={books.filter((_, i) => i % 3 === 0).slice(0, 8).map((b) => b.title)} />
         </div>
 
         {q ? (

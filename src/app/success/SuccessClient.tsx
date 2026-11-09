@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { moneyFromCents } from "@/lib/catalog";
+import { BookLoader } from "@/components/BookLoader";
+import { PaperConfetti } from "@/components/PaperConfetti";
 
 type OrderView = {
   id: string;
@@ -73,11 +75,16 @@ export default function SuccessClient() {
     <>
       <Topbar />
       <main className="mx-auto w-[min(720px,calc(100%-2rem))] pb-16 pt-8">
+        {order?.status === "PAID" ? <PaperConfetti /> : null}
         <section className="panel p-8 text-center">
-          <svg className="check-mark mx-auto mb-4" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-            <circle className="check-circle" cx="32" cy="32" r="29" />
-            <path className="check-tick" d="M19 33 l9 9 l17 -19" />
-          </svg>
+          {!order && !error ? (
+            <BookLoader label="Confirming your payment" />
+          ) : (
+            <svg className="check-mark mx-auto mb-4" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+              <circle className="check-circle" cx="32" cy="32" r="29" />
+              <path className="check-tick" d="M19 33 l9 9 l17 -19" />
+            </svg>
+          )}
           <h1 className="font-display text-4xl">Payment successful</h1>
           {error ? <p className="mt-3 text-red-700">{error}</p> : <p className="mt-3 text-ink-soft">{message}</p>}
 

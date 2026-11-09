@@ -52,6 +52,7 @@ export function StarInput({
   label: string;
 }) {
   const [hover, setHover] = useState(0);
+  const [burst, setBurst] = useState<{ n: number; key: number } | null>(null);
   const shown = hover || value;
   return (
     <div className="star-input" role="radiogroup" aria-label={label} onMouseLeave={() => setHover(0)}>
@@ -67,11 +68,21 @@ export function StarInput({
           onMouseEnter={() => setHover(n)}
           onFocus={() => setHover(n)}
           onBlur={() => setHover(0)}
-          onClick={() => onRate(n)}
+          onClick={() => {
+            onRate(n);
+            setBurst({ n, key: Date.now() });
+          }}
         >
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
             <path d={STAR} />
           </svg>
+          {burst && burst.n === n ? (
+            <span key={burst.key} className="star-burst" aria-hidden="true">
+              {Array.from({ length: 6 }, (_, k) => (
+                <i key={k} style={{ rotate: `${k * 60}deg` }} />
+              ))}
+            </span>
+          ) : null}
         </button>
       ))}
     </div>

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { moneyFromCents } from "@/lib/catalog";
 import { getSellerReport, LOW_STOCK } from "@/lib/sellerReport";
+import { KpiValue } from "@/components/KpiValue";
+import { Book3D } from "@/components/Book3D";
 
 type Report = Awaited<ReturnType<typeof getSellerReport>>;
 
@@ -12,11 +14,28 @@ const STEP_LABEL: Record<string, string> = {
   DELIVERED: "Delivered",
 };
 
-function Tile({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: "warn" }) {
+function Tile({
+  label,
+  value,
+  kind = "int",
+  note,
+  tone,
+  i = 0,
+}: {
+  i?: number;
+  label: string;
+  value: number;
+  kind?: "int" | "money";
+  note?: string;
+  tone?: "warn";
+}) {
   return (
-    <div className="panel p-5">
+    <div className="panel kpi-tile spotlight p-5" style={{ "--i": i } as React.CSSProperties}>
       <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">{label}</p>
-      <p className={`mt-2 font-display text-3xl tabular-nums ${tone === "warn" ? "text-[#9a3412]" : ""}`}>{value}</p>
+      <p className={`mt-2 font-display text-3xl tabular-nums ${tone === "warn" ? "text-[#9a3412]" : ""}`}>
+        {tone === "warn" ? <span className="pulse-dot" aria-hidden="true" /> : null}
+        <KpiValue value={value} kind={kind} />
+      </p>
       {note ? <p className="mt-1 text-sm text-ink-soft">{note}</p> : null}
     </div>
   );
@@ -24,9 +43,9 @@ function Tile({ label, value, note, tone }: { label: string; value: string; note
 
 function StockBadge({ stock }: { stock: number }) {
   if (stock < 1)
-    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">⛔ Sold out</span>;
+    return <span className="stock-chip is-out"><span className="pulse-dot" aria-hidden="true" />Sold out</span>;
   if (stock <= LOW_STOCK)
-    return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">⚠ Low · {stock}</span>;
+    return <span className="stock-chip is-low"><span className="pulse-dot" aria-hidden="true" />Low, {stock} left</span>;
   return <span className="text-sm tabular-nums">{stock}</span>;
 }
 
@@ -43,8 +62,14 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
     <>
       <Topbar />
       <main className="page pb-16">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div>
+        <div className="dash-head mb-6 flex flex-wrap items-end justify-between gap-4">
+          <Book3D
+            title={isStore ? "The Whole Store" : "Your Shelf"}
+            author={isStore ? "Admin ledger" : sellerName || "Seller ledger"}
+            category={isStore ? "history" : "nature"}
+            className="dash-book"
+          />
+          <div className="dash-head-copy">
             <h1 className="section-title">{isStore ? "Admin dashboard" : "Seller dashboard"}</h1>
             <p className="section-blurb">
               {isStore
@@ -70,19 +95,19 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
 
         <h2 className="mb-3 font-display text-xl">Money</h2>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Tile
+          <Tile i={0}
             label={isStore ? "Total earned" : "You earned"}
-            value={moneyFromCents(totals.revenueCents)}
+            value={totals.revenueCents} kind="money"
             note={isStore ? "Books + shipping, paid orders" : "From your books in paid orders"}
           />
           {isStore ? (
-            <Tile label="Book sales" value={moneyFromCents(totals.bookSalesCents)} note={`Shipping collected ${moneyFromCents(totals.shippingCents)}`} />
+            <Tile i={1} label="Book sales" value={totals.bookSalesCents} kind="money" note={`Shipping collected ${moneyFromCents(totals.shippingCents)}`} />
           ) : (
-            <Tile label="Titles listed" value={String(totals.titles)} note="Books you've put on the shelves" />
+            <Tile i={2} label="Titles listed" value={totals.titles} note="Books you've put on the shelves" />
           )}
-          <Tile
+          <Tile i={3}
             label={isStore ? "Paid orders" : "Orders with your books"}
-            value={String(totals.paidOrders)}
+            value={totals.paidOrders}
             note={[
               totals.cancelledOrders
                 ? `${totals.cancelledOrders} cancelled (${moneyFromCents(totals.refundedCents)} refunded)`
@@ -90,36 +115,36 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
               totals.pendingOrders ? `${totals.pendingOrders} unpaid` : "",
             ].filter(Boolean).join(" · ")}
           />
-          <Tile label={isStore ? "Average order" : "Average per order"} value={moneyFromCents(totals.avgOrderCents)} />
+          <Tile i={4} label={isStore ? "Average order" : "Average per order"} value={totals.avgOrderCents} kind="money" />
         </section>
 
         <h2 className="mb-3 mt-8 font-display text-xl">Stock</h2>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Tile label="Books sold" value={String(totals.unitsSold)} note="Copies across all paid orders" />
-          <Tile label="Copies in stock" value={String(totals.unitsInStock)} note={`${totals.titles} titles on the shelves`} />
-          <Tile label="Stock value" value={moneyFromCents(totals.stockValueCents)} note="Copies in stock × price" />
-          <Tile
+          <Tile i={5} label="Books sold" value={totals.unitsSold} note="Copies across all paid orders" />
+          <Tile i={6} label="Copies in stock" value={totals.unitsInStock} note={`${totals.titles} titles on the shelves`} />
+          <Tile i={7} label="Stock value" value={totals.stockValueCents} kind="money" note="Copies in stock × price" />
+          <Tile i={8}
             label="Needs restock"
-            value={String(totals.lowStock + totals.soldOut)}
+            value={totals.lowStock + totals.soldOut}
             note={`${totals.soldOut} sold out · ${totals.lowStock} low (≤ ${LOW_STOCK})`}
             tone={totals.lowStock + totals.soldOut > 0 ? "warn" : undefined}
           />
         </section>
 
-        <section className="panel mt-8 p-5">
+        <section className="panel dash-panel spotlight mt-8 p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-xl">Money earned per day</h2>
             <p className="text-sm text-ink-soft">Last 14 days · {moneyFromCents(fourteenDayCents)} total</p>
           </div>
           <div className="mt-6 flex h-48 items-end gap-[2px] border-b border-black/15" role="img" aria-label="Bar chart of money earned per day for the last 14 days. The table below has the same numbers.">
-            {report.daily.map((d) => {
+            {report.daily.map((d, i) => {
               const pct = d.cents ? Math.max(3, (d.cents / maxDay) * 100) : 0;
               const label = `${dayFmt.format(d.day)}: ${moneyFromCents(d.cents)} from ${d.orders} order${d.orders === 1 ? "" : "s"}`;
               return (
                 <div key={d.day.toISOString()} className="group relative flex h-full flex-1 items-end justify-center" title={label}>
                   <div
-                    className="w-full max-w-10 rounded-t-[4px] bg-forest transition-opacity group-hover:opacity-80"
-                    style={{ height: `${pct}%` }}
+                    className="chart-bar w-full max-w-10 rounded-t-[4px] bg-forest"
+                    style={{ height: `${pct}%`, "--i": i } as React.CSSProperties}
                   />
                   <span className="pointer-events-none absolute bottom-full mb-1 hidden whitespace-nowrap rounded-md bg-ink px-2 py-1 text-xs text-white group-hover:block">
                     {label}
@@ -153,14 +178,14 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
         </section>
 
         <div className="mt-8 grid gap-4 lg:grid-cols-2">
-          <section className="panel p-5">
+          <section className="panel dash-panel spotlight p-5">
             <h2 className="font-display text-xl">Restock soon</h2>
             {report.restock.length === 0 ? (
               <p className="mt-3 text-sm text-ink-soft">Every title has more than {LOW_STOCK} copies. Nothing to restock.</p>
             ) : (
               <ul className="mt-3 divide-y divide-black/10">
                 {report.restock.map((b) => (
-                  <li key={b.id} className="flex items-center justify-between gap-3 py-2">
+                  <li key={b.id} className="dash-row flex items-center justify-between gap-3 py-2">
                     <span>
                       <span className="font-semibold">{b.title}</span>
                       <span className="block text-xs text-ink-soft">{b.categoryName} · {b.unitsSold} sold</span>
@@ -172,14 +197,14 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
             )}
           </section>
 
-          <section className="panel p-5">
+          <section className="panel dash-panel spotlight p-5">
             <h2 className="font-display text-xl">Top sellers</h2>
             {report.topSellers.length === 0 ? (
               <p className="mt-3 text-sm text-ink-soft">No paid orders yet. Best-selling books will show here.</p>
             ) : (
               <ol className="mt-3 divide-y divide-black/10">
                 {report.topSellers.map((b, i) => (
-                  <li key={b.id} className="flex items-center justify-between gap-3 py-2">
+                  <li key={b.id} className="dash-row flex items-center justify-between gap-3 py-2">
                     <span>
                       <span className="mr-2 text-ink-soft tabular-nums">{i + 1}.</span>
                       <span className="font-semibold">{b.title}</span>
@@ -194,7 +219,7 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
         </div>
 
         {isStore ? (
-          <section className="panel mt-8 overflow-x-auto p-5">
+          <section className="panel dash-panel spotlight mt-8 overflow-x-auto p-5">
             <h2 className="font-display text-xl">Earnings by seller</h2>
             <p className="mt-1 text-sm text-ink-soft">&quot;Store&quot; is books the admin added.</p>
             <table className="mt-3 w-full min-w-[480px] text-left text-sm">
@@ -216,7 +241,7 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
           </section>
         ) : null}
 
-        <section className="panel mt-8 overflow-x-auto p-5">
+        <section className="panel dash-panel spotlight mt-8 overflow-x-auto p-5">
           <h2 className="font-display text-xl">Sales by category</h2>
           <table className="mt-3 w-full min-w-[480px] text-left text-sm">
             <thead className="text-ink-soft">
@@ -236,7 +261,7 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
           </table>
         </section>
 
-        <section className="panel mt-8 overflow-x-auto p-5">
+        <section className="panel dash-panel spotlight mt-8 overflow-x-auto p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-xl">Stock and sales by book</h2>
             <p className="text-sm text-ink-soft">{report.books.length} titles</p>
@@ -264,7 +289,7 @@ export function ReportDashboard({ report, sellerName }: { report: Report; seller
           </table>
         </section>
 
-        <section className="panel mt-8 overflow-x-auto p-5">
+        <section className="panel dash-panel spotlight mt-8 overflow-x-auto p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-xl">{isStore ? "Recent paid orders" : "Recent orders with your books"}</h2>
             {isStore ? <Link href="/orders" className="text-sm font-semibold text-forest underline underline-offset-4">See all orders</Link> : null}

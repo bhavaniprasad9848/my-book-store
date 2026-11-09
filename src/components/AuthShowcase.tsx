@@ -1,10 +1,21 @@
 import { Fragment } from "react";
-import { BookJacket } from "@/components/BookJacket";
+import { BookMarquee } from "@/components/BookMarquee";
 
-const STACK = [
+const ROW_A = [
   { title: "Birds Before Sunrise", author: "Tom Ellis", category: "nature" },
   { title: "Voices of Independence", author: "James Okoro", category: "history" },
   { title: "Map of the Hidden Harbor", author: "Selene Park", category: "adventure" },
+  { title: "The Moonlit Treehouse", author: "Priya Nair", category: "kids" },
+  { title: "Algebra Essentials Workbook", author: "Marcus Lin", category: "school" },
+  { title: "Kitchen Stories & Spices", author: "Ananya Mehta", category: "mix" },
+];
+const ROW_B = [
+  { title: "The Clockmakers of Vienna", author: "Erik Lang", category: "history" },
+  { title: "Ocean Currents Explained", author: "Mateo Ruiz", category: "nature" },
+  { title: "Ridge of the Copper Storm", author: "Kai Morgan", category: "adventure" },
+  { title: "Counting Clouds", author: "Amira Cole", category: "kids" },
+  { title: "Puzzle Nights Anthology", author: "Various Authors", category: "mix" },
+  { title: "World Geography Atlas for Students", author: "Nina Kapoor", category: "school" },
 ];
 
 /** Left-hand panel of the sign-in and register pages. `eyebrow` is accepted for compatibility but not shown. */
@@ -37,15 +48,9 @@ export function AuthShowcase({ title, subtitle }: { eyebrow?: string; title: str
         </h1>
         <p className="auth-subtitle">{subtitle}</p>
       </div>
-      <div className="auth-books" aria-hidden="true">
-        {STACK.map((b, i) => (
-          <div key={b.title} className={`auth-book auth-book-${i}`}>
-            <div className="auth-book-float" style={{ animationDelay: `${1.2 + i * 0.7}s` }}>
-              <BookJacket title={b.title} author={b.author} category={b.category} variant={i + 1} className="block h-full w-full" />
-              <span className="auth-book-shine" style={{ animationDelay: `${2 + i * 0.35}s` }} />
-            </div>
-          </div>
-        ))}
+      <div className="auth-marquees" aria-hidden="true">
+        <BookMarquee books={ROW_A} seconds={46} size="sm" />
+        <BookMarquee books={ROW_B} seconds={54} size="sm" reverse />
       </div>
     </section>
   );

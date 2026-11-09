@@ -1,4 +1,14 @@
-/** Re-mounts on every navigation, so each page's main content eases in like a turned page. */
+/**
+ * Re-mounts on every navigation. A paper page swings away on its spine to reveal the new page,
+ * like turning a page in a book, and the content eases in underneath.
+ */
 export default function Template({ children }: { children: React.ReactNode }) {
-  return <div className="route-enter">{children}</div>;
+  return (
+    <div className="route-enter">
+      <div className="page-turn" aria-hidden="true">
+        <span className="page-turn-sheet" />
+      </div>
+      {children}
+    </div>
+  );
 }

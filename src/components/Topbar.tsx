@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { getSession, signOut, useSession } from "next-auth/react";
 import { useCart } from "@/lib/cart";
 import { openCartDrawer } from "@/components/CartDrawer";
 
@@ -105,7 +105,12 @@ export function Topbar() {
               ) : null}
               <button
                 type="button"
-                onClick={() => signOut({ callbackUrl: isAdmin ? "/admin/login" : isSeller ? "/seller/login" : "/login" })}
+                onClick={async () => {
+                  // Ask the server who is signed in right now, so a stale role can't pick the wrong page.
+                  const fresh = await getSession();
+                  const r = fresh?.user?.role ?? role;
+                  await signOut({ callbackUrl: r === "ADMIN" ? "/admin/login" : r === "SELLER" ? "/seller/login" : "/login" });
+                }}
                 className="nav-link"
               >
                 Sign out

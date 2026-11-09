@@ -1,7 +1,10 @@
+import { BookLoader } from "@/components/BookLoader";
+
 /** Shown while the shop loads or a category/search is fetched: shimmering placeholder books. */
 export default function ShopLoading() {
   return (
     <main className="page" aria-busy="true" aria-label="Loading books">
+      <BookLoader label="Finding your books" />
       <div className="tabs skeleton-tabs">
         {Array.from({ length: 7 }, (_, i) => (
           <span key={i} className="skeleton h-4" style={{ width: `${48 + (i % 3) * 18}px` }} />

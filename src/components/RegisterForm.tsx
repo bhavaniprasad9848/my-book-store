@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { SignedInNotice } from "@/components/SignedInNotice";
 import { AuthShowcase } from "@/components/AuthShowcase";
 import { AuthBackdrop } from "@/components/AuthBackdrop";
 import { ErrorNote, PasswordField, Spinner, TextField } from "@/components/AuthFields";
@@ -36,7 +36,6 @@ const COPY = {
 /** Sign-up for customers (/register) and sellers (/seller/register). Both confirm the email with a code. */
 export function RegisterForm({ kind }: { kind: Kind }) {
   const copy = COPY[kind];
-  const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [failures, setFailures] = useState(0);
@@ -94,8 +93,8 @@ export function RegisterForm({ kind }: { kind: Kind }) {
       setFailures((n) => n + 1);
       return message;
     }
-    router.push(copy.after);
-    router.refresh();
+    // Full page load so the whole site starts fresh as the account that just signed in.
+    window.location.replace(copy.after);
     return null;
   }
 
@@ -120,6 +119,7 @@ export function RegisterForm({ kind }: { kind: Kind }) {
         </div>
       ) : (
         <form onSubmit={onSubmit} className={`panel auth-form flex flex-col justify-center p-8 sm:p-10 ${failures ? (failures % 2 ? "shake-a" : "shake-b") : ""} ${busy ? "is-busy" : ""}`}>
+          <SignedInNotice />
           <span className="form-progress" aria-hidden="true" />
           {kind === "seller" ? (
             <span className="mb-3 inline-flex w-fit items-center rounded-full bg-forest px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white">

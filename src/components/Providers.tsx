@@ -5,6 +5,8 @@ import { CartProvider } from "@/lib/cart";
 import { Toaster } from "@/components/Toaster";
 import { CartDrawer } from "@/components/CartDrawer";
 import { MotionProvider } from "@/components/MotionProvider";
+import { Spotlight } from "@/components/Spotlight";
+import { Ripples } from "@/components/Ripples";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -14,6 +16,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           {children}
           <Toaster />
           <CartDrawer />
+          <Spotlight />
+          <Ripples />
         </MotionProvider>
       </CartProvider>
     </SessionProvider>

@@ -7,6 +7,7 @@ import { useCart } from "@/lib/cart";
 import { calcShippingCents, moneyFromCents } from "@/lib/catalog";
 import { BookJacket } from "@/components/BookJacket";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { BookLoader } from "@/components/BookLoader";
 
 type Book = { id: string; title: string; author: string; priceCents: number; category: string; stock: number };
 
@@ -151,6 +152,7 @@ export function CartDrawer() {
                 <p className="text-ink-soft">Book details could not be loaded. Open the full cart page to continue.</p>
               ) : !books ? (
                 <div className="grid gap-4" aria-label="Loading cart">
+                  <BookLoader label="Opening your cart" />
                   {Array.from({ length: Math.min(count, 3) }, (_, i) => (
                     <div key={i} className="flex gap-4">
                       <span className="skeleton h-[78px] w-[52px]" />

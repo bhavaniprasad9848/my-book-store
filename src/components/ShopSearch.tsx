@@ -4,12 +4,53 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 /** Search by title or author. Updates the address as you type (after a short pause). */
-export function ShopSearch() {
+export function ShopSearch({ suggestions = [] }: { suggestions?: string[] }) {
   const router = useRouter();
   const params = useSearchParams();
   const [value, setValue] = useState(params.get("q") ?? "");
   const [pending, startTransition] = useTransition();
   const first = useRef(true);
+  const [focused, setFocused] = useState(false);
+  const [hint, setHint] = useState("");
+
+  // When the box is empty and idle, type out real titles as hints: "Try Canyon Echoes".
+  useEffect(() => {
+    if (!suggestions.length || value || focused) {
+      setHint("");
+      return;
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let i = 0;
+    let chars = 0;
+    let deleting = false;
+    let timer = 0;
+    const tick = () => {
+      const full = `Try \u201c${suggestions[i % suggestions.length]}\u201d`;
+      if (!deleting) {
+        chars += 1;
+        setHint(full.slice(0, chars));
+        if (chars >= full.length) {
+          deleting = true;
+          timer = window.setTimeout(tick, 1700);
+          return;
+        }
+        timer = window.setTimeout(tick, 55);
+      } else {
+        chars -= 2;
+        setHint(full.slice(0, Math.max(0, chars)));
+        if (chars <= 0) {
+          deleting = false;
+          chars = 0;
+          i += 1;
+          timer = window.setTimeout(tick, 450);
+          return;
+        }
+        timer = window.setTimeout(tick, 25);
+      }
+    };
+    timer = window.setTimeout(tick, 1200);
+    return () => window.clearTimeout(timer);
+  }, [suggestions, value, focused]);
 
   useEffect(() => {
     if (first.current) {
@@ -40,7 +81,9 @@ export function ShopSearch() {
         type="search"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Search title or author"
+        placeholder={hint || "Search title or author"}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         autoComplete="off"
       />
       {value ? (

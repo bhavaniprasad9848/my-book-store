@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { BookJacket } from "@/components/BookJacket";
 import { CountUp } from "@/components/AnimatedNumber";
+import { ScrollParallax } from "@/components/ScrollParallax";
 
 const FEATURED = [
   { title: "Ridge of the Copper Storm", author: "Kai Morgan", category: "adventure" },
@@ -15,6 +16,7 @@ const HEADLINE = "Second-hand books, chosen one shelf at a time.";
 export function ShopHero({ bookCount }: { bookCount: number }) {
   return (
     <section className="hero">
+      <ScrollParallax selector=".hero-shelf" factor={0.14} />
       <div className="hero-copy">
         <h1 className="hero-title" aria-label={HEADLINE}>
           {HEADLINE.split(" ").map((word, i) => (
@@ -36,7 +38,7 @@ export function ShopHero({ bookCount }: { bookCount: number }) {
       <div className="hero-shelf" aria-hidden="true">
         <div className="hero-books">
           {FEATURED.map((b, i) => (
-            <div key={b.title} className="hero-book" style={{ animationDelay: `${520 + i * 110}ms` }}>
+            <div key={b.title} className="hero-book" style={{ animationDelay: `${520 + i * 110}ms, ${2.4 + i * 2.6}s` }}>
               <BookJacket title={b.title} author={b.author} category={b.category} variant={i + 1} className="block h-full w-full" />
             </div>
           ))}
